@@ -1,4 +1,4 @@
-LDLIBS	= -lraptor2
+LDLIBS	= -lraptor2 -lpcre
 # CFLAGS	= -fblocks -g -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2
 CFLAGS	= -fblocks -O3 -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2
 

@@ -4,6 +4,20 @@
 #include <inttypes.h>
 #include "avl.h"
 
+typedef enum {
+	TERM_IRI					= 1,
+	TERM_BLANK					= 2,
+	TERM_XSDSTRING_LITERAL		= 3,
+	TERM_LANG_LITERAL			= 4,
+	TERM_TYPED_LITERAL			= 5
+} rdf_term_type_t;
+
+typedef struct rdf_term_s {
+	rdf_term_type_t type;
+	char* value;
+	char* value_type;
+} rdf_term_t;
+
 typedef struct index_list_element_s {
 	uint32_t s;
 	uint32_t p;
@@ -12,7 +26,7 @@ typedef struct index_list_element_s {
 } index_list_element_t;
 
 typedef struct graph_node_s {
-	raptor_term* term;
+	rdf_term_t* _term;
 	uint64_t mtime;
 	
 	uint32_t out_degree;
@@ -24,8 +38,6 @@ typedef struct graph_node_s {
 } graph_node_t;
 
 typedef struct triplestore_s {
-	raptor_world* world;
-	
 	int edges_alloc;
 	int edges_used;
 	
