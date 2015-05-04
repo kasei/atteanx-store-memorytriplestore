@@ -4,6 +4,8 @@
 #include <inttypes.h>
 #include "avl.h"
 
+typedef uint32_t nodeid_t;
+
 typedef enum {
 	TERM_IRI					= 1,
 	TERM_BLANK					= 2,
@@ -37,6 +39,13 @@ typedef struct graph_node_s {
 	
 } graph_node_t;
 
+typedef struct bgp_s {
+	int triples;
+	int64_t* nodes;
+	int variables;
+	char** variable_names;
+} bgp_t;
+
 typedef struct triplestore_s {
 	int edges_alloc;
 	int edges_used;
@@ -50,3 +59,18 @@ typedef struct triplestore_s {
 	
 	struct avl_table* dictionary;
 } triplestore_t;
+
+double triplestore_current_time ( void );
+double triplestore_elapsed_time ( double start );
+
+char* triplestore_term_to_string(rdf_term_t* t);
+triplestore_t* new_triplestore(int max_nodes, int max_edges);
+int free_triplestore(triplestore_t* t);
+int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp);
+nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm);
+
+int triplestore_load_file(triplestore_t* t, const char* filename, int print, int verbose);
+
+int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o));
+int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^block)(nodeid_t* final_match));
+

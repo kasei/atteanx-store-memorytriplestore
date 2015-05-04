@@ -1,4 +1,5 @@
 .DS_Store
 .triplestore-history
 *.o
-triplestore
+ts
+*.dSYM
