@@ -1,4 +1,3 @@
-#include <ctype.h>
 #include <fcntl.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -42,7 +41,7 @@ double triplestore_elapsed_time ( double start ) {
 
 #pragma mark -
 
-rdf_term_t* new_term( rdf_term_type_t type, char* value, char* vtype ) {
+rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype ) {
 	rdf_term_t* t	= calloc(sizeof(rdf_term_t), 1);
 	t->type			= type;
 	t->value		= calloc(1, 1+strlen(value));
@@ -111,15 +110,26 @@ char* triplestore_term_to_string(rdf_term_t* t) {
 			break;
 		case TERM_XSDSTRING_LITERAL:
 			string	= calloc(3+strlen(t->value), 1);
-			sprintf(string, "\"%s\"", t->value);	// TODO: handle escaping
+			// TODO: handle escaping
+			sprintf(string, "\"%s\"", t->value);
 			break;
 		case TERM_LANG_LITERAL:
+			// TODO: handle escaping
 			string	= calloc(4+strlen(t->value)+strlen(t->value_type), 1);
 			sprintf(string, "\"%s\"@%s", t->value, t->value_type);
 			break;
 		case TERM_TYPED_LITERAL:
+			// TODO: handle escaping
 			string	= calloc(7+strlen(t->value)+strlen(t->value_type), 1);
-			sprintf(string, "\"%s\"^^<%s>", t->value, t->value_type);
+			if (!strcmp(t->value_type, "http://www.w3.org/2001/XMLSchema#float")) {
+				sprintf(string, "%s", t->value);
+			} else if (!strcmp(t->value_type, "http://www.w3.org/2001/XMLSchema#integer")) {
+				sprintf(string, "%s", t->value);
+			} else if (!strcmp(t->value_type, "http://www.w3.org/2001/XMLSchema#boolean")) {
+				sprintf(string, "%s", t->value);
+			} else {
+				sprintf(string, "\"%s\"^^<%s>", t->value, t->value_type);
+			}
 			break;
 	}
 	return string;
@@ -172,6 +182,7 @@ int free_triplestore(triplestore_t* t) {
 
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp) {
 	if (t->edges_used >= t->edges_alloc) {
+		// TODO: resize t->out_edges and t->in_edges
 		fprintf(stderr, "*** Exhausted allocated space for edges.\n");
 		return 1;
 	}
@@ -208,20 +219,20 @@ static rdf_term_t* term_from_raptor_term(raptor_term* t) {
 	switch (t->type) {
 		case RAPTOR_TERM_TYPE_URI:
 			value	= (char*) raptor_uri_as_string(t->value.uri);
-			return new_term(TERM_IRI, value, NULL);
+			return triplestore_new_term(TERM_IRI, value, NULL);
 		case RAPTOR_TERM_TYPE_BLANK:
 			value	= (char*) t->value.blank.string;
-			return new_term(TERM_BLANK, value, NULL);
+			return triplestore_new_term(TERM_BLANK, value, NULL);
 		case RAPTOR_TERM_TYPE_LITERAL:
 			value	= (char*) t->value.literal.string;
 			if (t->value.literal.language) {
 				vtype	= (char*) t->value.literal.language;
-				return new_term(TERM_LANG_LITERAL, value, vtype);
+				return triplestore_new_term(TERM_LANG_LITERAL, value, vtype);
 			} else if (t->value.literal.datatype) {
 				vtype	= (char*) raptor_uri_as_string(t->value.literal.datatype);
-				return new_term(TERM_TYPED_LITERAL, value, vtype);
+				return triplestore_new_term(TERM_TYPED_LITERAL, value, vtype);
 			} else {
-				return new_term(TERM_XSDSTRING_LITERAL, value, NULL);
+				return triplestore_new_term(TERM_XSDSTRING_LITERAL, value, NULL);
 			}
 		default:
 			fprintf(stderr, "*** unknown node type %d during import\n", t->type);
@@ -236,6 +247,7 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 	hx_nodemap_item* item	= (hx_nodemap_item*) avl_find( t->dictionary, &i );
 	if (item == NULL) {
 		if (t->nodes_used >= t->nodes_alloc) {
+			// TODO: resize t->graph
 			fprintf(stderr, "*** Exhausted allocated space for nodes.\n");
 			return 1;
 		}
