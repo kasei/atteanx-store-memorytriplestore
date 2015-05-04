@@ -362,6 +362,8 @@ int triplestore_load_file(triplestore_t* t, const char* filename, int print, int
 #pragma mark -
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o)) {
+	// TODO: check for repeated variables used to filter results
+	//       e.g. (-1, 0, -1) for all triples where subject == object
 	if (_s > 0) {
 		nodeid_t idx	= t->graph[_s].out_edge_head;
 		while (idx != 0) {

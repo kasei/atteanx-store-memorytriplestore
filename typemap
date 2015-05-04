@@ -1,0 +1,4 @@
+TYPEMAP
+
+triplestore_t* T_PTROBJ_MG
+rdf_term_t* T_PTROBJ_MG
