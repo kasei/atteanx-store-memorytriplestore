@@ -68,6 +68,7 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges);
 int free_triplestore(triplestore_t* t);
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp);
 nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm);
+nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm);
 
 int triplestore_load_file(triplestore_t* t, const char* filename, int print, int verbose);
 

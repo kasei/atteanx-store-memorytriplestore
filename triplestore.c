@@ -240,6 +240,19 @@ static rdf_term_t* term_from_raptor_term(raptor_term* t) {
 	}
 }
 
+nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm) {
+	hx_nodemap_item i;
+	i._term			= myterm;
+	i.id			= 0;
+	hx_nodemap_item* item	= (hx_nodemap_item*) avl_find( t->dictionary, &i );
+	free_rdf_term(myterm);
+	if (item == NULL) {
+		return 0;
+	} else {
+		return item->id;
+	}
+}
+
 nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 	hx_nodemap_item i;
 	i._term			= myterm;
