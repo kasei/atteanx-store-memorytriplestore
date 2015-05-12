@@ -9,7 +9,7 @@ CC		= clang
 #import: import.c
 #	$(CC) $(CFLAGS) $(LDLIBS) import.c -o import
 
-ts: triplestore.o avl.o linenoise.o
+ts: ts.c triplestore.o avl.o linenoise.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o
 
 clean:
