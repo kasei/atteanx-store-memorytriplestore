@@ -502,13 +502,45 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^bloc
 
 #pragma mark -
 
-void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f) {
-	fprintf(f, "- Triples: %d\n", bgp->triples);
-	for (int t = 0; t < bgp->triples; t++) {
-		fprintf(f, "  - %"PRId64" %"PRId64" %"PRId64"\n", bgp->nodes[3*t+0], bgp->nodes[3*t+1], bgp->nodes[3*t+2]);
+int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
+	rdf_term_t* subject		= t->graph[s]._term;
+	if (subject == NULL) assert(0);
+	char* ss		= triplestore_term_to_string(subject);
+	fprintf(f, "%s", ss);
+	if (newline) {
+		fprintf(f, "\n");
 	}
+	free(ss);
+	return 0;
+}
+
+static void _print_term_or_variable(triplestore_t* t, bgp_t* bgp, int64_t s, FILE* f) {
+	if (s == 0) {
+		fprintf(f, "[]");
+	} else if (s < 0) {
+		fprintf(f, "%s", bgp->variable_names[-s]);
+	} else {
+		triplestore_print_term(t, s, f, 0);
+	}
+}
+
+void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f) {
 	fprintf(f, "- Variables: %d\n", bgp->variables);
 	for (int v = 1; v <= bgp->variables; v++) {
 		fprintf(f, "  - %s\n", bgp->variable_names[v]);
+	}
+	fprintf(f, "- Triples: %d\n", bgp->triples);
+	for (int i = 0; i < bgp->triples; i++) {
+		int64_t s	= bgp->nodes[3*i+0];
+		int64_t p	= bgp->nodes[3*i+1];
+		int64_t o	= bgp->nodes[3*i+2];
+		
+		fprintf(f, "  - ");
+		_print_term_or_variable(t, bgp, s, f);
+		fprintf(f, " ");
+		_print_term_or_variable(t, bgp, p, f);
+		fprintf(f, " ");
+		_print_term_or_variable(t, bgp, o, f);
+		fprintf(f, "\n");
 	}
 }
