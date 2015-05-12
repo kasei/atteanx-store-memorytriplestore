@@ -425,24 +425,53 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 	int64_t s	= bgp->nodes[offset];
 	int64_t p	= bgp->nodes[offset+1];
 	int64_t o	= bgp->nodes[offset+2];
+	int64_t sv	= -s;
+	int64_t pv	= -p;
+	int64_t ov	= -o;
+	int reset_s	= 0;
+	int reset_p	= 0;
+	int reset_o	= 0;
 	if (s < 0) {
-		if (-s < offset) {
-			s	= current_match[-s];
+		if (current_match[sv] > 0) {
+			s	= current_match[sv];
+			if (s == 0) {
+				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", sv);
+				assert(0);
+			}
+		} else {
+			reset_s	= 1;
 		}
 	}
 	if (p < 0) {
-		if (-p < offset) {
-			p	= current_match[-p];
+		if (current_match[pv] > 0) {
+			p	= current_match[pv];
+			if (p == 0) {
+				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", pv);
+				assert(0);
+			}
+		} else {
+			reset_p	= 1;
 		}
 	}
 	if (o < 0) {
-		if (-o < offset) {
-			o	= current_match[-o];
+		if (current_match[ov] > 0) {
+			o	= current_match[ov];
+			if (o == 0) {
+				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", ov);
+				assert(0);
+			}
+		} else {
+			reset_o	= 1;
 		}
 	}
 	
+	if (o == 0) {
+		fprintf(stderr, "Got unexpected zero node from nodes[%d]\n", offset+2);
+		assert(0);
+	}
 // 	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
-	return triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+	int r	= triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+// 		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
 		if (s < 0) {
 			current_match[-s]	= _s;
 		}
@@ -454,6 +483,12 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 		}
 		return _triplestore_bgp_match(t, bgp, current_triple+1, current_match, block);
 	});
+	
+	if (reset_s) current_match[sv]	= 0;
+	if (reset_p) current_match[pv]	= 0;
+	if (reset_o) current_match[ov]	= 0;
+	
+	return r;
 }
 
 // final_match is a node ID array with final_match[0] representing the number of following node IDs
@@ -467,3 +502,13 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^bloc
 
 #pragma mark -
 
+void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f) {
+	fprintf(f, "- Triples: %d\n", bgp->triples);
+	for (int t = 0; t < bgp->triples; t++) {
+		fprintf(f, "  - %"PRId64" %"PRId64" %"PRId64"\n", bgp->nodes[3*t+0], bgp->nodes[3*t+1], bgp->nodes[3*t+2]);
+	}
+	fprintf(f, "- Variables: %d\n", bgp->variables);
+	for (int v = 1; v <= bgp->variables; v++) {
+		fprintf(f, "  - %s\n", bgp->variable_names[v]);
+	}
+}
