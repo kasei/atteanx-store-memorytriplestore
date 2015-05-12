@@ -80,18 +80,6 @@ int triplestore_match_terms(triplestore_t* t, const char* pattern, int64_t limit
 
 #pragma mark -
 
-int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
-	rdf_term_t* subject		= t->graph[s]._term;
-	if (subject == NULL) assert(0);
-	char* ss		= triplestore_term_to_string(subject);
-	fprintf(f, "%s", ss);
-	if (newline) {
-		fprintf(f, "\n");
-	}
-	free(ss);
-	return 0;
-}
-
 int triplestore_print_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, FILE* f) {
 	rdf_term_t* subject		= t->graph[s]._term;
 	rdf_term_t* predicate	= t->graph[p]._term;
@@ -176,7 +164,6 @@ nodeid_t triplestore_print_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit
 		count++;
 		if (f != NULL) {
 			for (int j = 1; j <= bgp->variables; j++) {
-// 				if (bgp->variable_indexes[j] >= 0) {
 					nodeid_t id	= final_match[j];
 					fprintf(f, "%s=", bgp->variable_names[j]);
 // 					fprintf(f, "%"PRIu32"", id);
@@ -193,6 +180,22 @@ nodeid_t triplestore_print_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit
 
 #pragma mark -
 
+void help(FILE* f) {
+	fprintf(f, "Commands:\n");
+	fprintf(f, "  help\n");
+	fprintf(f, "  (un)set print\n");
+	fprintf(f, "  (un)set verbose\n");
+	fprintf(f, "  (un)set limit LIMIT\n");
+	fprintf(f, "  match PATTERN\n");
+	fprintf(f, "  ntriples\n");
+	fprintf(f, "  dump\n");
+	fprintf(f, "  nodes\n");
+	fprintf(f, "  edges\n");
+	fprintf(f, "  bgp S1 P1 O1 S2 P2 O2 ...\n");
+	fprintf(f, "  triple S P O\n");
+	fprintf(f, "\n");
+}
+
 int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char** argv) {
 	if (argc == 0) {
 		return 1;
@@ -206,7 +209,9 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	int i	= 0;
 	FILE* f	= ctx->print ? stdout : NULL;
 	const char* op			= argv[i];
-	if (!strcmp(op, "set")) {
+	if (!strcmp(op, "help")) {
+		help(f);
+	} else if (!strcmp(op, "set")) {
 		const char* field	= argv[++i];
 		if (!strcmp(field, "print")) {
 			ctx->print	= 1;
@@ -248,10 +253,6 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		bgp.triples				= (argc - i) / 3;
 		bgp.nodes				= calloc(sizeof(int64_t), 3 * bgp.triples);
 		bgp.variable_names		= calloc(sizeof(char*), 3*bgp.triples+1);
-// 		bgp.variable_indexes	= calloc(sizeof(int), 3*bgp.triples+1);
-// 		for (int j = 0; j <= 3*bgp.triples; j++) {
-// 			bgp.variable_indexes[j]	= -1;
-// 		}
 		int j	= 0;
 		while (i+1 < argc) {
 			int index			= j++;
@@ -264,21 +265,28 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 					if (bgp.variable_names[j]) {
 						if (!strcmp(bgp.variable_names[j]+1, ts)) {
 							id	= -j;
-							fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
+// 							fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
 							break;
 						}
 					}
 				}
 				if (id == 0) {
 					id			= -(++bgp.variables);
-					fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
-// 					bgp.variable_indexes[-id]	= bgp.variables;
+// 					fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
 					bgp.variable_names[-id]		= calloc(1,2+strlen(ts));
 					sprintf(bgp.variable_names[-id], "?%s", ts);
 				}
 			}
 			bgp.nodes[index]	= id;
 		}
+		
+		if (ctx->verbose) {
+			fprintf(stderr, "------------------------\n");		
+			fprintf(stderr, "Matching BGP:\n");
+			triplestore_print_bgp(t, &bgp, stderr);
+			fprintf(stderr, "------------------------\n");
+		}
+
 		double start	= triplestore_current_time();
 		nodeid_t count	= triplestore_print_bgp_match(t, &bgp, ctx->limit, f);
 		if (ctx->verbose) {
@@ -288,7 +296,6 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		
 		free(bgp.nodes);
 		free(bgp.variable_names);
-// 		free(bgp.variable_indexes);
 	} else if (!strcmp(op, "triple")) {
 		int64_t s	= atoi(argv[++i]);
 		int64_t p	= atoi(argv[++i]);
@@ -306,9 +313,19 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	return 0;
 }
 
+void usage(int argc, char** argv, FILE* f) {
+	fprintf(f, "Usage: %s [-v] [-p] input.nt OP\n\n", argv[0]);
+}
+
 int main (int argc, char** argv) {
-	if (argc < 3) {
-		fprintf(stderr, "Usage: %s input.nt OP\n\n", argv[0]);
+	if (argc > 1 && !strcmp(argv[1], "--help")) {
+		usage(argc, argv, stdout);
+		help(stdout);
+		return 0;
+	}
+	
+	if (argc == 1) {
+		usage(argc, argv, stderr);
 		return 1;
 	}
 
