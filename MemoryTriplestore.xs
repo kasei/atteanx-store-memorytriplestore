@@ -65,7 +65,7 @@ new_node_instance (pTHX_ SV *klass, UV n_args, ...)
 }
 
 static void
-call_triple_handler_cb (pTHX_ SV *closure, UV n_args, ...)
+call_handler_cb (pTHX_ SV *closure, UV n_args, ...)
 {
 	int count;
 	va_list ap;
@@ -188,17 +188,44 @@ handle_new_triple_object (SV* closure, rdf_term_t* subject, rdf_term_t* predicat
 	SvREFCNT_dec(o);
 	
 // 	fprintf(stderr, "Parsed: %p %p %p\n", triple->subject, triple->predicate, triple->object);
-	call_triple_handler_cb(closure, 1, t);
+	call_handler_cb(closure, 1, t);
 	SvREFCNT_dec(t);
+	return;
+}
+
+void
+handle_new_result_object (triplestore_t* t, SV* closure, const bgp_t* bgp, nodeid_t* match) {
+	HV*	hash	= newHV();
+	for (int j = 1; j <= bgp->variables; j++) {
+		nodeid_t id	= match[j];
+		rdf_term_t* term	= t->graph[id]._term;
+		SV* object			= rdf_term_to_object(term);
+		const char* key		= bgp->variable_names[j];
+		hv_store(hash, key, strlen(key), object, 0);
+	}
+	
+	SV* hashref	= newRV_inc((SV*) hash);
+	call_handler_cb(closure, 1, hashref);
 	return;
 }
 
 #define new_instance(klass)	 S_new_instance(aTHX_ klass)
 #define attach_struct(obj, ptr)	 S_attach_struct(aTHX_ obj, ptr)
+#define EXPORT_FLAG(flag)  newCONSTSUB(stash, #flag, newSVuv(flag))
 
 MODULE = AtteanX::Store::MemoryTriplestore	PACKAGE = AtteanX::Store::MemoryTriplestore	PREFIX = triplestore_
 
 PROTOTYPES: DISABLE
+
+BOOT:
+{
+	HV *stash = gv_stashpvs("AtteanX::Store::MemoryTriplestore", 0);
+	EXPORT_FLAG(TERM_IRI);
+	EXPORT_FLAG(TERM_BLANK);
+	EXPORT_FLAG(TERM_XSDSTRING_LITERAL);
+	EXPORT_FLAG(TERM_LANG_LITERAL);
+	EXPORT_FLAG(TERM_TYPED_LITERAL);
+}
 
 void
 triplestore_build_struct (SV* self)
@@ -208,15 +235,74 @@ triplestore_build_struct (SV* self)
 		if (!(t = new_triplestore(268435456, 268435456))) {
 			croak("Failed to create new triplestore");
 		}
-		triplestore_load_file(t, "/Users/greg/foaf.ttl", 1, 1);
-//		fprintf(stderr, "new raptor parser: %p\n", parser);
+		// triplestore_load_file(t, "/Users/greg/foaf.ttl", 1, 1);
+		// fprintf(stderr, "new raptor parser: %p\n", parser);
 		xs_object_magic_attach_struct(aTHX_ SvRV(self), t);
+
+int
+triplestore_load_file(triplestore_t *store, char* filename, int print, int verbose)
+
+int
+triplestore__term_to_id1(triplestore_t *store, int type, char* value)
+	PREINIT:
+		rdf_term_t* term;
+		nodeid_t id;
+	CODE:
+		term = triplestore_new_term(type, value, NULL);
+		id = triplestore_get_term(store, term);
+		RETVAL = (int) id;
+	OUTPUT:
+		RETVAL
+
+int
+triplestore__term_to_id2(triplestore_t *store, int type, char* value, char* extra)
+	PREINIT:
+		rdf_term_t* term;
+		nodeid_t id;
+	CODE:
+		term = triplestore_new_term(type, value, extra);
+		id = triplestore_get_term(store, term);
+		RETVAL = (int) id;
+	OUTPUT:
+		RETVAL
 
 void
 triplestore_DESTROY (triplestore_t *store)
 	CODE:
 //		 fprintf(stderr, "destroying triplestore: %p\n", store);
 	  free_triplestore(store);
+
+void
+triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, SV* closure)
+	INIT:
+		int i;
+		SV** svp;
+		char* ptr;
+		bgp_t bgp;
+		IV iv;
+	CODE:
+		bgp.variables		= variables;
+		bgp.triples			= triples;
+		bgp.variable_names	= calloc(sizeof(char*), variables+1);
+		bgp.nodes			= calloc(sizeof(int64_t), 3 * bgp.triples);
+		for (i = 1; i <= variables; i++) {
+			svp	= av_fetch(names, i, 0);
+			ptr = SvPV_nolen(*svp);
+			bgp.variable_names[i] = ptr;
+// 			fprintf(stderr, "name[%d] = '%s'\n", i, ptr);
+		}
+		for (i = 0; i < 3*triples; i++) {
+			svp	= av_fetch(ids, i, 0);
+			iv = SvIV(*svp);
+			bgp.nodes[i] = (int64_t) iv;
+		}
+// 		triplestore_print_bgp(t, &bgp, stderr);
+		triplestore_bgp_match(t, &bgp, -1, ^(nodeid_t* final_match){
+			handle_new_result_object(t, closure, &bgp, final_match);
+			return 0;
+		});
+		free(bgp.variable_names);
+		free(bgp.nodes);
 
 void
 triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)

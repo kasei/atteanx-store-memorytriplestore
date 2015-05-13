@@ -16,10 +16,19 @@ package AtteanX::Store::MemoryTriplestore 0.001 {
 	use AtteanX::Store::MemoryTriplestore::IRI;
 	use AtteanX::Store::MemoryTriplestore::Blank;
 	with 'Attean::API::TripleStore';
+	with 'Attean::API::CostPlanner';
 	
 	sub BUILD {
 		my $self	= shift;
+		my $args	= shift;
 		$self->build_struct();
+		if (my $filename = $args->{'filename'}) {
+			if (-r $filename) {
+				$self->load_file($filename, 0, 0);
+			} else {
+				warn "*** Cannot read from $filename";
+			}
+		}
 	}
 	
 	sub get_triples {
@@ -45,13 +54,165 @@ package AtteanX::Store::MemoryTriplestore 0.001 {
 			}
 		}
 		
-		warn 'get_triples called';
 		my @triples;
 		$self->get_triples_cb(@ids, sub {
 			my $t	= shift;
 			push(@triples, $t);
 		});
 		return Attean::ListIterator->new(values => \@triples, item_type => 'Attean::API::Triple');
+	}
+	
+	sub match_bgp {
+		my $self	= shift;
+		my @ids;
+		my $last	= 0;
+		my %vars;
+		my @names	= ('');
+		my $triple_count	= scalar(@_);
+		foreach my $triple (@_) {
+			foreach my $term ($triple->values) {
+				if ($term->does('Attean::API::Variable')) {
+					if (exists $vars{$term->value}) {
+						push(@ids, $vars{$term->value});
+					} else {
+						my $id	= ++$last;
+						$names[$id]	= $term->value;
+						$vars{$term->value}	= -$id;
+						push(@ids, -$id);
+					}
+				} else {
+					push(@ids, $self->_id_from_term($term));
+				}
+			}
+		}
+		
+		my $bgp	= {
+			triples			=> $triple_count,
+			variables		=> $last,
+			nodes			=> \@ids,
+			variable_names	=> \@names
+		};
+		my @results;
+		$self->match_bgp_cb($triple_count, $last, \@ids, \@names, sub {
+			my $hash	= shift;
+			my $result	= Attean::Result->new( bindings => $hash );
+			push(@results, $result);
+		});
+		return Attean::ListIterator->new(values => \@results, item_type => 'Attean::API::Result');
+	}
+	
+	sub _id_from_term {
+		my $self	= shift;
+		my $term	= shift;
+		if ($term->does('Attean::API::IRI')) {
+			return $self->_term_to_id1(TERM_IRI, $term->value);
+		} elsif ($term->does('Attean::API::Blank')) {
+			return $self->_term_to_id1(TERM_BLANK, $term->value);
+		} elsif ($term->does('Attean::API::Literal')) {
+			if ($term->has_language) {
+				return $self->_term_to_id2(TERM_LANG_LITERAL, $term->value, $term->language);
+			} else {
+				my $dt	= $term->datatype;
+				if ($dt->value eq 'http://www.w3.org/2001/XMLSchema#string') {
+					return $self->_term_to_id1(TERM_XSDSTRING_LITERAL, $term->value);
+				} else {
+					return $self->_term_to_id2(TERM_TYPED_LITERAL, $term->value, $dt->value);
+				}
+			}
+		}
+		warn "uh oh. no id found for term: " . $term->as_string;
+		return 0;
+	}
+	
+	sub _triple_cost {
+		my $t		= shift;
+		my @nodes	= $t->values;
+		my @v		= map { $_->value } grep { $_->does('Attean::API::Variable') } @nodes;
+		my $cost	= scalar(@v);
+		foreach my $i (0,2) {
+			if ($nodes[$i]->does('Attean::API::Variable')) {
+				$cost	*= 2;
+			}
+		}
+		return $cost;
+	}
+	
+	sub _ordered_triples_from_bgp {
+		my $self	= shift;
+		my $bgp		= shift;
+		my @triples	= map { [_triple_cost($_), $_] } @{ $bgp->triples };
+		my @sorted	= sort { $a->[0] <=> $b->[0] } @triples;
+		
+		my $first	= shift(@sorted)->[1];
+		my @final	= ($first);
+		my %seen	= map { $_->value => 1 } $first->values_consuming_role('Attean::API::Variable');
+		LOOP: while (scalar(@sorted)) {
+			foreach my $i (0 .. $#sorted) {
+				my $pair	= $sorted[$i];
+				my $triple	= $pair->[1];
+				my @tvars	= map { $_->value } $triple->values_consuming_role('Attean::API::Variable');
+				foreach my $tvar (@tvars) {
+					if ($seen{$tvar}) {
+						push(@final, $triple);
+						splice(@sorted, $i, 1);
+						foreach my $v (@tvars) {
+							$seen{$v}++;
+						}
+						next LOOP;
+					}
+				}
+			}
+			
+			my $default	= shift(@sorted);
+			push(@final, $default->[1]);
+		}
+		return @final;
+	}
+	
+	sub plans_for_algebra {
+		my $self	= shift;
+		my $algebra	= shift;
+		if ($algebra->isa('Attean::Algebra::BGP')) {
+			my @triples	= $self->_ordered_triples_from_bgp($algebra);
+			return AtteanX::Store::MemoryTriplestore::BGPPlan->new(
+				triples 	=> \@triples,
+				store		=> $self,
+				distinct	=> 0,
+				in_scope_variables	=> [ $algebra->in_scope_variables ],
+				ordered	=> [],
+			);
+		}
+		return;
+	}
+
+	sub cost_for_plan {
+		my $self	= shift;
+		my $plan	= shift;
+		if ($plan->isa('AtteanX::Store::MemoryTriplestore::BGPPlan')) {
+			return 1; # TODO: actually estimate cost here
+		}
+		return;
+	}
+}
+
+package AtteanX::Store::MemoryTriplestore::BGPPlan 0.001 {
+	use Moo;
+	use Types::Standard qw(ConsumerOf ArrayRef InstanceOf);
+	with 'Attean::API::Plan', 'Attean::API::NullaryQueryTree';
+	has 'triples' => (is => 'ro',  isa => ArrayRef[ConsumerOf['Attean::API::TriplePattern']], default => sub { [] });
+	has 'store' => (is => 'ro', isa => InstanceOf['AtteanX::Store::MemoryTriplestore'], required => 1);
+	sub plan_as_string {
+		return 'BGP(MemoryTripleStore)'
+	}
+	
+	sub impl {
+		my $self	= shift;
+		my $model	= shift;
+		my $store	= $self->store;
+		my @triples	= @{ $self->triples };
+		return sub {
+			return $store->match_bgp(@triples);
+		}
 	}
 }
 

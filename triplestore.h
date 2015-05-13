@@ -63,6 +63,9 @@ typedef struct triplestore_s {
 double triplestore_current_time ( void );
 double triplestore_elapsed_time ( double start );
 
+rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype );
+void free_rdf_term(rdf_term_t* t);
+
 char* triplestore_term_to_string(rdf_term_t* t);
 triplestore_t* new_triplestore(int max_nodes, int max_edges);
 int free_triplestore(triplestore_t* t);
