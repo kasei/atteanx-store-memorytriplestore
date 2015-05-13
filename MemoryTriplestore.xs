@@ -111,13 +111,13 @@ rdf_term_to_object(rdf_term_t* t) {
 	SV* dt_key;
 	switch (t->type) {
 		case TERM_IRI:
-			class	= newSVpvs("AtteanX::Store::MemoryTriplestore::IRI");
+			class	= newSVpvs("AtteanX::Store::MemoryTripleStore::IRI");
 			object	= new_node_instance(aTHX_ class, 0);
 			SvREFCNT_dec(class);
 			xs_object_magic_attach_struct(aTHX_ SvRV(object), t);
 			return object;
 		case TERM_BLANK:
-			class	= newSVpvs("AtteanX::Store::MemoryTriplestore::Blank");
+			class	= newSVpvs("AtteanX::Store::MemoryTripleStore::Blank");
 			object	= new_node_instance(aTHX_ class, 0);
 			SvREFCNT_dec(class);
 			xs_object_magic_attach_struct(aTHX_ SvRV(object), t);
@@ -213,13 +213,13 @@ handle_new_result_object (triplestore_t* t, SV* closure, const bgp_t* bgp, nodei
 #define attach_struct(obj, ptr)	 S_attach_struct(aTHX_ obj, ptr)
 #define EXPORT_FLAG(flag)  newCONSTSUB(stash, #flag, newSVuv(flag))
 
-MODULE = AtteanX::Store::MemoryTriplestore	PACKAGE = AtteanX::Store::MemoryTriplestore	PREFIX = triplestore_
+MODULE = AtteanX::Store::MemoryTripleStore	PACKAGE = AtteanX::Store::MemoryTripleStore	PREFIX = triplestore_
 
 PROTOTYPES: DISABLE
 
 BOOT:
 {
-	HV *stash = gv_stashpvs("AtteanX::Store::MemoryTriplestore", 0);
+	HV *stash = gv_stashpvs("AtteanX::Store::MemoryTripleStore", 0);
 	EXPORT_FLAG(TERM_IRI);
 	EXPORT_FLAG(TERM_BLANK);
 	EXPORT_FLAG(TERM_XSDSTRING_LITERAL);
@@ -313,7 +313,7 @@ triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)
 		});
 
 
-MODULE = AtteanX::Store::MemoryTriplestore PACKAGE = AtteanX::Store::MemoryTriplestore::IRI PREFIX = rdf_term_iri_
+MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::IRI PREFIX = rdf_term_iri_
 
 SV*
 rdf_term_iri_value (rdf_term_t* term)
@@ -323,7 +323,7 @@ rdf_term_iri_value (rdf_term_t* term)
 	OUTPUT:
 		RETVAL
 
-MODULE = AtteanX::Store::MemoryTriplestore PACKAGE = AtteanX::Store::MemoryTriplestore::Blank PREFIX = rdf_term_blank_
+MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::Blank PREFIX = rdf_term_blank_
 
 SV*
 rdf_term_blank_value (rdf_term_t* term)

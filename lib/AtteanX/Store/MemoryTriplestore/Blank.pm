@@ -1,8 +1,8 @@
 use v5.14;
 use warnings;
 
-package AtteanX::Store::MemoryTriplestore::Blank 0.001 {
-	use AtteanX::Store::MemoryTriplestore;
+package AtteanX::Store::MemoryTripleStore::Blank 0.001 {
+	use AtteanX::Store::MemoryTripleStore;
 	use Moo;
 	use Types::Standard qw(Str);
 

@@ -1,7 +1,7 @@
 use v5.14;
 use warnings;
 
-package AtteanX::Store::MemoryTriplestore 0.001 {
+package AtteanX::Store::MemoryTripleStore 0.001 {
 	use Moo;
 	use XSLoader;
 	use XS::Object::Magic;
@@ -10,11 +10,11 @@ package AtteanX::Store::MemoryTriplestore 0.001 {
 	
 	BEGIN {
 		our $VERSION;
-		XSLoader::load('AtteanX::Store::MemoryTriplestore', $VERSION);
+		XSLoader::load('AtteanX::Store::MemoryTripleStore', $VERSION);
 	}
 
-	use AtteanX::Store::MemoryTriplestore::IRI;
-	use AtteanX::Store::MemoryTriplestore::Blank;
+	use AtteanX::Store::MemoryTripleStore::IRI;
+	use AtteanX::Store::MemoryTripleStore::Blank;
 	with 'Attean::API::TripleStore';
 	with 'Attean::API::CostPlanner';
 	
@@ -174,7 +174,7 @@ package AtteanX::Store::MemoryTriplestore 0.001 {
 		my $algebra	= shift;
 		if ($algebra->isa('Attean::Algebra::BGP')) {
 			my @triples	= $self->_ordered_triples_from_bgp($algebra);
-			return AtteanX::Store::MemoryTriplestore::BGPPlan->new(
+			return AtteanX::Store::MemoryTripleStore::BGPPlan->new(
 				triples 	=> \@triples,
 				store		=> $self,
 				distinct	=> 0,
@@ -188,19 +188,19 @@ package AtteanX::Store::MemoryTriplestore 0.001 {
 	sub cost_for_plan {
 		my $self	= shift;
 		my $plan	= shift;
-		if ($plan->isa('AtteanX::Store::MemoryTriplestore::BGPPlan')) {
+		if ($plan->isa('AtteanX::Store::MemoryTripleStore::BGPPlan')) {
 			return 1; # TODO: actually estimate cost here
 		}
 		return;
 	}
 }
 
-package AtteanX::Store::MemoryTriplestore::BGPPlan 0.001 {
+package AtteanX::Store::MemoryTripleStore::BGPPlan 0.001 {
 	use Moo;
 	use Types::Standard qw(ConsumerOf ArrayRef InstanceOf);
 	with 'Attean::API::Plan', 'Attean::API::NullaryQueryTree';
 	has 'triples' => (is => 'ro',  isa => ArrayRef[ConsumerOf['Attean::API::TriplePattern']], default => sub { [] });
-	has 'store' => (is => 'ro', isa => InstanceOf['AtteanX::Store::MemoryTriplestore'], required => 1);
+	has 'store' => (is => 'ro', isa => InstanceOf['AtteanX::Store::MemoryTripleStore'], required => 1);
 	sub plan_as_string {
 		return 'BGP(MemoryTripleStore)'
 	}
