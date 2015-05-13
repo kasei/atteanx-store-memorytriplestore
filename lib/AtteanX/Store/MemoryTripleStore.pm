@@ -1,3 +1,41 @@
+=head1 NAME
+
+AtteanX::Store::MemoryTripleStore - In-memory RDF triple store
+
+=head1 VERSION
+
+This document describes AtteanX::Store::MemoryTripleStore version 0.001
+
+=head1 SYNOPSIS
+
+ use AtteanX::Store::MemoryTripleStore;
+
+=head1 DESCRIPTION
+
+AtteanX::Store::MemoryTripleStore provides an in-memory triple-store that is
+especially optimized for matching BGPs which contain at least one bound subject
+or object (e.g. preferring star or path queries rather than analytical
+queries).
+
+The triple store is read-only, requiring a filename to be specified during
+construction which points at an N-Triples or Turtle file containing the RDF
+data to load. The triple store links with libraptor2 to allow fast parsing of
+input files.
+
+=head1 METHODS
+
+Beyond the methods documented below, this class consumes the
+L<Attean::API::TripleStore> and L<Attean::API::CostPlanner> roles.
+
+=over 4
+
+=item C<< new (filename => $filename) >>
+
+Returns a new memory-backed storage object containing the RDF data parsed from
+the specified N-Triples- or Turtle-encoded file.
+
+=cut
+
 use v5.14;
 use warnings;
 
@@ -31,6 +69,15 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 		}
 	}
 	
+=item C<< get_triples ( $subject, $predicate, $object ) >>
+
+Returns an iterator object of all L<Attean::API::Triple> objects matching the
+specified subject, predicate and objects. Any of the arguments may be undef to
+match any value, an L<Attean::API::Term> object, or an ARRAY reference
+containing a set of possible term values.
+
+=cut
+
 	sub get_triples {
 		my $self	= shift;
 		my @nodes	= @_;
@@ -62,6 +109,13 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 		return Attean::ListIterator->new(values => \@triples, item_type => 'Attean::API::Triple');
 	}
 	
+=item C<< match_bgp ( @triples ) >>
+
+Returns an iterator object of all L<Attean::API::Result> objects representing
+variable bindings which match the specified L<Attean::API::TriplePattern>s.
+
+=cut
+
 	sub match_bgp {
 		my $self	= shift;
 		my @ids;
@@ -169,6 +223,16 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 		return @final;
 	}
 	
+=item C<< plans_for_algebra ( $algebra ) >>
+
+If C<$algebra> is an L<Attean::Algebra::BGP> object, returns a store-specific
+L<Attean::API::Plan> object representing the evaluation of the entire BGP
+against the triplestore.
+
+Otherwise, returns an empty list.
+
+=cut
+
 	sub plans_for_algebra {
 		my $self	= shift;
 		my $algebra	= shift;
@@ -184,6 +248,15 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 		}
 		return;
 	}
+
+=item C<< cost_for_plan ( $plan ) >>
+
+If C<$plan> is a recognized store-specific L<Attean::API::Plan> object,
+returns an estimated (relative) cost value for evaluating the represented BGP.
+
+Otherwise returns C<undef>.
+
+=cut
 
 	sub cost_for_plan {
 		my $self	= shift;
