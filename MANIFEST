@@ -1,0 +1,12 @@
+avl.c
+avl.h
+lib/AtteanX/Store/MemoryTripleStore.pm
+lib/AtteanX/Store/MemoryTripleStore/Blank.pm
+lib/AtteanX/Store/MemoryTripleStore/IRI.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+MemoryTripleStore.xs
+triplestore.c
+triplestore.h
+typemap
