@@ -4,3 +4,6 @@
 ts
 *.dSYM
 test.pl
+MYMETA.json
+MYMETA.yml
+Makefile
