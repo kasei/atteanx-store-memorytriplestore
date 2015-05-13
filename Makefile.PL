@@ -12,10 +12,10 @@ my $src_files = join(' ', glob '*.c');
 my $xs_files  = join(' ', glob '*.xs');
 
 my %WriteMakefileArgs	= (
-    NAME => 'AtteanX::Store::MemoryTripleStore',
-    VERSION => '0.001',
-    $deps->get_makefile_vars,
-    MIN_PERL_VERSION	=> 5.014,
+    NAME							=> 'AtteanX::Store::MemoryTripleStore',
+    VERSION 						=> '0.001',
+    LICENSE							=> 'gpl_2',
+    MIN_PERL_VERSION				=> 5.014,
     PREREQ_PM => {
     	'Moose'						=> 0,
     	'Params::Util'				=> 0,
@@ -24,6 +24,7 @@ my %WriteMakefileArgs	= (
     	'Moo'						=> 0,
     	'Type::Tiny'				=> 0,
     },
+    $deps->get_makefile_vars,
 );
 
 $WriteMakefileArgs{OBJECT}	.= join(' ', split(' ', $WriteMakefileArgs{OBJECT}), "triplestore.o", "avl.o", "MemoryTripleStore.o");
