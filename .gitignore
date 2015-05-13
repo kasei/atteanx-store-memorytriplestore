@@ -3,3 +3,4 @@
 *.o
 ts
 *.dSYM
+test.pl
