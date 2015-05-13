@@ -31,6 +31,4 @@ $WriteMakefileArgs{depend}{'MemoryTripleStore.xs'} = "avl.o triplestore.o";
 $WriteMakefileArgs{depend}{'triplestore.c'} = "triplestore.h avl.h avl.c";
 $WriteMakefileArgs{depend}{'avl.c'} = "avl.h";
 
-use Data::Dumper;
-warn Dumper(\%WriteMakefileArgs);
 WriteMakefile( %WriteMakefileArgs );
