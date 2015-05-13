@@ -10,3 +10,4 @@ MemoryTripleStore.xs
 triplestore.c
 triplestore.h
 typemap
+t/simple.t
