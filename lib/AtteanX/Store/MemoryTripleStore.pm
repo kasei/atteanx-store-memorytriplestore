@@ -296,3 +296,28 @@ package AtteanX::Store::MemoryTripleStore::BGPPlan 0.001 {
 }
 
 1;
+
+__END__
+
+=back
+
+=head1 BUGS
+
+Please report any bugs or feature requests to through the GitHub web interface
+at L<https://github.com/kasei/atteanx-store-memorytriplestore/issues>.
+
+=head1 SEE ALSO
+
+L<http://www.perlrdf.org/>
+
+=head1 AUTHOR
+
+Gregory Todd Williams  C<< <gwilliams@cpan.org> >>
+
+=head1 COPYRIGHT
+
+Copyright (c) 2015 Gregory Todd Williams.
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License.
+
+=cut
