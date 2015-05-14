@@ -333,7 +333,7 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 	raptor_free_world(world);
 }
 
-int triplestore_load_file(triplestore_t* t, const char* filename, int print, int verbose) {
+int triplestore__load_file(triplestore_t* t, const char* filename, int print, int verbose) {
 	__block struct parser_ctx_s pctx	= {
 		.limit				= -1,
 		.error				= 0,
