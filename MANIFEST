@@ -12,3 +12,4 @@ triplestore.h
 typemap
 t/simple.t
 Changes.ttl
+README.md
