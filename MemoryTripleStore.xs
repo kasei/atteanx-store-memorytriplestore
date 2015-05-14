@@ -235,12 +235,12 @@ triplestore_build_struct (SV* self)
 		if (!(t = new_triplestore(268435456, 268435456))) {
 			croak("Failed to create new triplestore");
 		}
-		// triplestore_load_file(t, "/Users/greg/foaf.ttl", 1, 1);
+		// triplestore__load_file(t, "/Users/greg/foaf.ttl", 1, 1);
 		// fprintf(stderr, "new raptor parser: %p\n", parser);
 		xs_object_magic_attach_struct(aTHX_ SvRV(self), t);
 
 int
-triplestore_load_file(triplestore_t *store, char* filename, int print, int verbose)
+triplestore__load_file(triplestore_t *store, char* filename, int print, int verbose)
 
 int
 triplestore_size(triplestore_t *store)

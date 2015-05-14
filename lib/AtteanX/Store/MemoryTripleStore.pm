@@ -62,11 +62,17 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 		$self->build_struct();
 		if (my $filename = $args->{'filename'}) {
 			if (-r $filename) {
-				$self->load_file($filename, 0, 0);
+				$self->load_file($filename);
 			} else {
 				warn "*** Cannot read from $filename";
 			}
 		}
+	}
+	
+	sub load_file {
+		my $self	= shift;
+		my $filename	= shift;
+		$self->_load_file($filename, 0, 0);
 	}
 	
 =item C<< get_triples ( $subject, $predicate, $object ) >>
