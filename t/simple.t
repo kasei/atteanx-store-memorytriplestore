@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
 
 use v5.14;
-use blib;
 use Test::More;
 use Attean;
 
