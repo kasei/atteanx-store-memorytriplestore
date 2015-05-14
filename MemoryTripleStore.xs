@@ -243,6 +243,9 @@ int
 triplestore_load_file(triplestore_t *store, char* filename, int print, int verbose)
 
 int
+triplestore_size(triplestore_t *store)
+
+int
 triplestore__term_to_id1(triplestore_t *store, int type, char* value)
 	PREINIT:
 		rdf_term_t* term;

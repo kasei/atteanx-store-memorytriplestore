@@ -63,19 +63,9 @@ void free_rdf_term(rdf_term_t* t) {
 	free(t);
 }
 
-// TODO:
-// int result_compare(node_id_t** a, node_id_t** b) {
-// 	if (a == NULL) return -1;
-// 	if (b == NULL) return 1;
-// 	int len	= ((*a)[0] < (*b)[0]) ? (*a)[0] : (*b)[0];
-// 	for (int i = 0; i < len; i++) {
-// 		if ((*a)[i] != (*b)[i]) {
-// 			return ...
-// 		}
-// 		...
-// 	}
-// 	...
-// }
+int triplestore_size(triplestore_t* t) {
+	return t->edges_used;
+}
 
 int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	if (a == NULL) return -1;
