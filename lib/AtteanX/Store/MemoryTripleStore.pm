@@ -103,7 +103,12 @@ containing a set of possible term values.
 					$ids[$pos]	= $vars{$n->value};
 				}
 			} else {
-				$ids[$pos]	= $self->_id_from_term($n);
+				my $id		= $self->_id_from_term($n);
+				unless ($id) {
+					# term does not exist in the store
+					return Attean::ListIterator->new(values => [], item_type => 'Attean::API::Triple');
+				}
+				$ids[$pos]	= $id;
 			}
 		}
 		
@@ -141,7 +146,12 @@ variable bindings which match the specified L<Attean::API::TriplePattern>s.
 						push(@ids, -$id);
 					}
 				} else {
-					push(@ids, $self->_id_from_term($term));
+					my $id		= $self->_id_from_term($term);
+					unless ($id) {
+						# term does not exist in the store
+						return Attean::ListIterator->new(values => [], item_type => 'Attean::API::Triple');
+					}
+					push(@ids, $id);
 				}
 			}
 		}
