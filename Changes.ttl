@@ -1,0 +1,28 @@
+# -*-n3-*-
+
+@prefix dc:      <http://purl.org/dc/elements/1.1/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix doap:    <http://usefulinc.com/ns/doap#> .
+@prefix asc:     <http://aaronland.info/ns/changefile/> .
+                                     
+<>
+        dc:description          "Changes for AtteanX-Store-MemoryTripleStore" ;
+        dcterms:references      <http://kasei.us/code/atteanx-store-memorytriplestore/#project> .
+
+
+<http://kasei.us/code/files/AtteanX-Store-MemoryTripleStore-0.001.tar.gz>
+        dcterms:isVersionOf <http://kasei.us/code/atteanx-store-memorytriplestore/#project> ;
+        dcterms:replaces    <http://kasei.us/code/files/AtteanX-Store-MemoryTripleStore-0.000.tar.gz> ;
+
+        doap:Version    [
+                        doap:revision     "0.001" ;
+                        doap:created      "2015-XX-XX" ;
+                        ];
+        asc:changes     [
+                        asc:addition    "First release." ;
+                        ] .
+
+<http://kasei.us/code/atteanx-store-memorytriplestore/#project>
+        a doap:Project ;
+        doap:download-page      <http://search.cpan.org/dist/AtteanX-Store-MemoryTripleStore/> ;
+        doap:download-mirror    <http://kasei.us/code/files/> .
