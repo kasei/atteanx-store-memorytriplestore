@@ -11,5 +11,6 @@ triplestore.c
 triplestore.h
 typemap
 t/simple.t
+t/store-triple.t
 Changes.ttl
 README.md
