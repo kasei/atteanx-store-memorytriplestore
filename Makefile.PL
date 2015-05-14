@@ -24,6 +24,12 @@ my %WriteMakefileArgs	= (
     	'Moo'						=> 0,
     	'Type::Tiny'				=> 0,
     },
+    TEST_REQUIRES => {
+    	'File::Temp'				=> 0,
+    	'Test::Roo'					=> 0,
+    	'Test::Exception'			=> 0,
+    	'Test::More'				=> 0,
+    },
     $deps->get_makefile_vars,
 );
 
