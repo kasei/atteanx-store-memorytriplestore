@@ -233,7 +233,7 @@ triplestore_build_struct (SV* self)
 		triplestore_t *t;
 	CODE:
  		// if (!(t = new_triplestore(268435456, 268435456))) {
-		if (!(t = new_triplestore(25000000, 25000000))) {
+		if (!(t = new_triplestore(5000000, 5000000))) {
 			croak("Failed to create new triplestore");
 			RETVAL = 1;
 		} else {

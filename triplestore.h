@@ -24,7 +24,8 @@ typedef struct index_list_element_s {
 	uint32_t s;
 	uint32_t p;
 	uint32_t o;
-	uint32_t next;
+	uint32_t next_in;
+	uint32_t next_out;
 } index_list_element_t;
 
 typedef struct graph_node_s {
@@ -53,8 +54,7 @@ typedef struct triplestore_s {
 	int nodes_alloc;
 	int nodes_used;
 	
-	index_list_element_t* out_edges;
-	index_list_element_t* in_edges;
+	index_list_element_t* edges;
 	graph_node_t* graph;
 	
 	struct avl_table* dictionary;

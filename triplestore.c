@@ -153,21 +153,16 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	t->nodes_alloc	= max_nodes;
 	t->edges_used	= 0;
 	t->nodes_used	= 0;
-	t->out_edges	= calloc(sizeof(index_list_element_t), max_edges);
-	if (t->out_edges == NULL) {
+// 	fprintf(stderr, "allocating %d bytes for %"PRIu32" edges\n", max_edges * sizeof(index_list_element_t), max_edges);
+	t->edges		= calloc(sizeof(index_list_element_t), max_edges);
+	if (t->edges == NULL) {
 		fprintf(stderr, "*** Failed to allocate memory for triplestore edges\n");
 		return NULL;
 	}
-	t->in_edges		= calloc(sizeof(index_list_element_t), max_edges);
-	if (t->in_edges == NULL) {
-		free(t->out_edges);
-		fprintf(stderr, "*** Failed to allocate memory for triplestore edges\n");
-		return NULL;
-	}
+// 	fprintf(stderr, "allocating %d bytes for graph for %"PRIu32" nodes\n", max_nodes * sizeof(graph_node_t), max_nodes);
 	t->graph		= calloc(sizeof(graph_node_t), max_nodes);
 	if (t->graph == NULL) {
-		free(t->out_edges);
-		free(t->in_edges);
+		free(t->edges);
 		fprintf(stderr, "*** Failed to allocate memory for triplestore graph\n");
 		return NULL;
 	}
@@ -177,8 +172,7 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 
 int free_triplestore(triplestore_t* t) {
 	avl_destroy(t->dictionary, _hx_free_node_item);
-	free(t->out_edges);
-	free(t->in_edges);
+	free(t->edges);
 	free(t->graph);
 	free(t);
 	return 0;
@@ -188,7 +182,7 @@ int free_triplestore(triplestore_t* t) {
 
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp) {
 	if (t->edges_used >= t->edges_alloc) {
-		// TODO: resize t->out_edges and t->in_edges
+		// TODO: resize t->edges
 		fprintf(stderr, "*** Exhausted allocated space for edges.\n");
 		return 1;
 	}
@@ -199,18 +193,16 @@ int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o,
 	
 	nodeid_t edge				= ++t->edges_used;
 
-	t->out_edges[ edge ].s		= s;
-	t->out_edges[ edge ].p		= p;
-	t->out_edges[ edge ].o		= o;
-	t->out_edges[ edge ].next	= t->graph[s].out_edge_head;
+	t->edges[ edge ].s			= s;
+	t->edges[ edge ].p			= p;
+	t->edges[ edge ].o			= o;
+	t->edges[ edge ].next_out	= t->graph[s].out_edge_head;
+	t->edges[ edge ].next_in	= t->graph[o].in_edge_head;
+
 	t->graph[s].out_edge_head	= edge;
 	t->graph[s].mtime			= timestamp;
 	t->graph[s].out_degree++;
 	
-	t->in_edges[ edge ].s		= s;
-	t->in_edges[ edge ].p		= p;
-	t->in_edges[ edge ].o		= o;
-	t->in_edges[ edge ].next	= t->graph[o].in_edge_head;
 	t->graph[o].in_edge_head	= edge;
 	t->graph[o].mtime			= timestamp;
 	t->graph[o].in_degree++;
@@ -373,8 +365,8 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 	if (_s > 0) {
 		nodeid_t idx	= t->graph[_s].out_edge_head;
 		while (idx != 0) {
-			nodeid_t p	= t->out_edges[idx].p;
-			nodeid_t o	= t->out_edges[idx].o;
+			nodeid_t p	= t->edges[idx].p;
+			nodeid_t o	= t->edges[idx].o;
 			if (_p <= 0 || _p == p) {
 				if (_o <= 0 || _o == o) {
 					if (block(t, _s, p, o)) {
@@ -382,13 +374,13 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 					}
 				}
 			}
-			idx			= t->out_edges[idx].next;
+			idx			= t->edges[idx].next_out;
 		}
 	} else if (_o > 0) {
 		nodeid_t idx	= t->graph[_o].in_edge_head;
 		while (idx != 0) {
-			nodeid_t p	= t->in_edges[idx].p;
-			nodeid_t s	= t->in_edges[idx].s;
+			nodeid_t p	= t->edges[idx].p;
+			nodeid_t s	= t->edges[idx].s;
 			if (_p <= 0 || _p == p) {
 				if (_s <= 0 || _s == s) {
 					if (block(t, s, p, _o)) {
@@ -396,15 +388,15 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 					}
 				}
 			}
-			idx			= t->in_edges[idx].next;
+			idx			= t->edges[idx].next_in;
 		}
 	} else {
 		for (nodeid_t s = 1; s < t->nodes_used; s++) {
 			if (_s <= 0 || _s == s) {
 				nodeid_t idx	= t->graph[s].out_edge_head;
 				while (idx != 0) {
-					nodeid_t p	= t->out_edges[idx].p;
-					nodeid_t o	= t->out_edges[idx].o;
+					nodeid_t p	= t->edges[idx].p;
+					nodeid_t o	= t->edges[idx].o;
 					if (_p <= 0 || _p == p) {
 						if (_o <= 0 || _o == o) {
 							if (block(t, s, p, o)) {
@@ -412,7 +404,7 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 							}
 						}
 					}
-					idx			= t->out_edges[idx].next;
+					idx			= t->edges[idx].next_out;
 				}
 			}
 		}
