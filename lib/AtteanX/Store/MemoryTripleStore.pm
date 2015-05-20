@@ -39,7 +39,7 @@ the specified N-Triples- or Turtle-encoded file.
 use v5.14;
 use warnings;
 
-package AtteanX::Store::MemoryTripleStore 0.001 {
+package AtteanX::Store::MemoryTripleStore {
 	use Moo;
 	use XSLoader;
 	use XS::Object::Magic;
@@ -47,7 +47,7 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 	use Scalar::Util qw(blessed);
 	
 	BEGIN {
-		our $VERSION;
+		our $VERSION	= '0.000_01';
 		XSLoader::load('AtteanX::Store::MemoryTripleStore', $VERSION);
 	}
 
