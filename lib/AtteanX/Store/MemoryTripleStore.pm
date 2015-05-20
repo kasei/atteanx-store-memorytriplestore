@@ -59,7 +59,9 @@ package AtteanX::Store::MemoryTripleStore 0.001 {
 	sub BUILD {
 		my $self	= shift;
 		my $args	= shift;
-		$self->build_struct();
+		if ($self->build_struct()) {
+			die "Failed to construct triplestore object";
+		}
 		if (my $filename = $args->{'filename'}) {
 			if (-r $filename) {
 				$self->load_file($filename);

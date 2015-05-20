@@ -227,7 +227,7 @@ BOOT:
 	EXPORT_FLAG(TERM_TYPED_LITERAL);
 }
 
-void
+int
 triplestore_build_struct (SV* self)
 	PREINIT:
 		triplestore_t *t;
@@ -235,10 +235,15 @@ triplestore_build_struct (SV* self)
  		// if (!(t = new_triplestore(268435456, 268435456))) {
 		if (!(t = new_triplestore(25000000, 25000000))) {
 			croak("Failed to create new triplestore");
+			RETVAL = 1;
+		} else {
+			// triplestore__load_file(t, "/Users/greg/foaf.ttl", 1, 1);
+			// fprintf(stderr, "new raptor parser: %p\n", parser);
+			xs_object_magic_attach_struct(aTHX_ SvRV(self), t);
+			RETVAL = 0;
 		}
-		// triplestore__load_file(t, "/Users/greg/foaf.ttl", 1, 1);
-		// fprintf(stderr, "new raptor parser: %p\n", parser);
-		xs_object_magic_attach_struct(aTHX_ SvRV(self), t);
+	OUTPUT:
+		RETVAL
 
 int
 triplestore__load_file(triplestore_t *store, char* filename, int print, int verbose)
