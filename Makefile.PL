@@ -30,6 +30,7 @@ my %WriteMakefileArgs	= (
     	'Test::Exception'			=> 0,
     	'Test::More'				=> 0,
     },
+    CC								=> 'clang',
     $deps->get_makefile_vars,
 );
 
