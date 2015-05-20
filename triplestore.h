@@ -17,7 +17,10 @@ typedef enum {
 typedef struct rdf_term_s {
 	rdf_term_type_t type;
 	char* value;
-	char* value_type;
+	union {
+		uint32_t value_id;
+		char* value_type;
+	};
 } rdf_term_t;
 
 typedef struct index_list_element_s {

@@ -1,3 +1,7 @@
+// TODO: change encoding of typed literals to use t.value_id slot with node id instead of t.value_type slot with IRI string.
+
+
+
 #include <fcntl.h>
 #include <time.h>
 #include <assert.h>
@@ -51,6 +55,8 @@ rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype
 	if (vtype) {
 		t->value_type	= calloc(1, 1+strlen(vtype));
 		strcpy(t->value_type, vtype);
+	} else {
+		t->value_id	= 0;
 	}
 	
 	return t;
@@ -58,7 +64,7 @@ rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype
 
 void free_rdf_term(rdf_term_t* t) {
 	free(t->value);
-	if (t->value_type) {
+	if (t->type == TERM_LANG_LITERAL || t->type == TERM_TYPED_LITERAL) {
 		free(t->value_type);
 	}
 	free(t);
@@ -178,13 +184,42 @@ int free_triplestore(triplestore_t* t) {
 	return 0;
 }
 
+int triplestore_expand_edges(triplestore_t* t) {
+	int alloc	= t->edges_alloc;
+	alloc		*= 2;
+// 	fprintf(stderr, "Expanding triplestore to accept %d edges\n", alloc);
+	index_list_element_t* edges	= realloc(t->edges, alloc * sizeof(index_list_element_t));
+	if (edges) {
+		t->edges		= edges;
+		t->edges_alloc	= alloc;
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
+int triplestore_expand_nodes(triplestore_t* t) {
+	int alloc	= t->nodes_alloc;
+	alloc		*= 2;
+// 	fprintf(stderr, "Expanding triplestore to accept %d nodes\n", alloc);
+	graph_node_t* graph	= realloc(t->graph, alloc * sizeof(graph_node_t));
+	if (graph) {
+		t->graph		= graph;
+		t->nodes_alloc	= alloc;
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
 #pragma mark -
 
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp) {
 	if (t->edges_used >= t->edges_alloc) {
-		// TODO: resize t->edges
-		fprintf(stderr, "*** Exhausted allocated space for edges.\n");
-		return 1;
+		if (triplestore_expand_edges(t)) {
+			fprintf(stderr, "*** Exhausted allocated space for edges.\n");
+			return 1;
+		}
 	}
 	
 	if (s == 0 || p == 0 || o == 0) {
@@ -258,9 +293,10 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 	hx_nodemap_item* item	= (hx_nodemap_item*) avl_find( t->dictionary, &i );
 	if (item == NULL) {
 		if (t->nodes_used >= t->nodes_alloc) {
-			// TODO: resize t->graph
-			fprintf(stderr, "*** Exhausted allocated space for nodes.\n");
-			return 1;
+			if (triplestore_expand_nodes(t)) {
+				fprintf(stderr, "*** Exhausted allocated space for nodes.\n");
+				return 1;
+			}
 		}
 
 		item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
