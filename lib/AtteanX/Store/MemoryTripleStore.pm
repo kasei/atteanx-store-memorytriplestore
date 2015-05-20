@@ -188,7 +188,8 @@ variable bindings which match the specified L<Attean::API::TriplePattern>s.
 				if ($dt->value eq 'http://www.w3.org/2001/XMLSchema#string') {
 					return $self->_term_to_id1(TERM_XSDSTRING_LITERAL, $term->value);
 				} else {
-					return $self->_term_to_id2(TERM_TYPED_LITERAL, $term->value, $dt->value);
+					my $dtid		= $self->_id_from_term($dt);
+					return $self->_term_to_id3(TERM_TYPED_LITERAL, $term->value, $dtid);
 				}
 			}
 		}

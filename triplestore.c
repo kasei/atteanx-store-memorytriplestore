@@ -46,7 +46,7 @@ double triplestore_elapsed_time ( double start ) {
 
 #pragma mark -
 
-rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype ) {
+rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype, nodeid_t vid ) {
 	rdf_term_t* t	= calloc(sizeof(rdf_term_t), 1);
 	t->type			= type;
 	t->value		= calloc(1, 1+strlen(value));
@@ -56,7 +56,7 @@ rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype
 		t->value_type	= calloc(1, 1+strlen(vtype));
 		strcpy(t->value_type, vtype);
 	} else {
-		t->value_id	= 0;
+		t->value_id	= vid;
 	}
 	
 	return t;
@@ -64,7 +64,7 @@ rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype
 
 void free_rdf_term(rdf_term_t* t) {
 	free(t->value);
-	if (t->type == TERM_LANG_LITERAL || t->type == TERM_TYPED_LITERAL) {
+	if (t->type == TERM_LANG_LITERAL) {
 		free(t->value_type);
 	}
 	free(t);
@@ -82,10 +82,14 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	} else if (a->type > b->type) {
 		return 1;
 	} else {
-		if (a->type == TERM_LANG_LITERAL || a->type == TERM_TYPED_LITERAL) {
+		if (a->type == TERM_LANG_LITERAL) {
 			int r	= strcmp(a->value_type, b->value_type);
 			if (r) {
 				return r;
+			}
+		} else if (a->type == TERM_TYPED_LITERAL) {
+			if (a->value_id != b->value_id) {
+				return (a->value_id - b->value_id);
 			}
 		}
 		
@@ -94,8 +98,9 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	return 0;
 }
 
-char* triplestore_term_to_string(rdf_term_t* t) {
+char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 	char* string	= NULL;
+	char* extra		= NULL;
 	switch (t->type) {
 		case TERM_IRI:
 			string	= calloc(3+strlen(t->value), 1);
@@ -117,16 +122,20 @@ char* triplestore_term_to_string(rdf_term_t* t) {
 			break;
 		case TERM_TYPED_LITERAL:
 			// TODO: handle escaping
-			string	= calloc(7+strlen(t->value)+strlen(t->value_type), 1);
-			if (!strcmp(t->value_type, "http://www.w3.org/2001/XMLSchema#float")) {
+			
+			extra	= triplestore_term_to_string(store, store->graph[ t->value_id ]._term);
+			
+			string	= calloc(7+strlen(t->value)+strlen(extra), 1);
+			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#float>")) {
 				sprintf(string, "%s", t->value);
-			} else if (!strcmp(t->value_type, "http://www.w3.org/2001/XMLSchema#integer")) {
+			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
 				sprintf(string, "%s", t->value);
-			} else if (!strcmp(t->value_type, "http://www.w3.org/2001/XMLSchema#boolean")) {
+			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#boolean>")) {
 				sprintf(string, "%s", t->value);
 			} else {
-				sprintf(string, "\"%s\"^^<%s>", t->value, t->value_type);
+				sprintf(string, "\"%s\"^^%s", t->value, extra);
 			}
+			free(extra);
 			break;
 	}
 	return string;
@@ -245,27 +254,34 @@ int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o,
 	return 0;
 }
 
-static rdf_term_t* term_from_raptor_term(raptor_term* t) {
+static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t) {
 	// TODO: datatype IRIs should be referenced by term ID, not an IRI string (lots of wasted space)
 	char* value				= NULL;
 	char* vtype				= NULL;
 	switch (t->type) {
 		case RAPTOR_TERM_TYPE_URI:
 			value	= (char*) raptor_uri_as_string(t->value.uri);
-			return triplestore_new_term(TERM_IRI, value, NULL);
+			return triplestore_new_term(TERM_IRI, value, NULL, 0);
 		case RAPTOR_TERM_TYPE_BLANK:
 			value	= (char*) t->value.blank.string;
-			return triplestore_new_term(TERM_BLANK, value, NULL);
+			return triplestore_new_term(TERM_BLANK, value, NULL, 0);
 		case RAPTOR_TERM_TYPE_LITERAL:
 			value	= (char*) t->value.literal.string;
 			if (t->value.literal.language) {
 				vtype	= (char*) t->value.literal.language;
-				return triplestore_new_term(TERM_LANG_LITERAL, value, vtype);
+				return triplestore_new_term(TERM_LANG_LITERAL, value, vtype, 0);
 			} else if (t->value.literal.datatype) {
 				vtype	= (char*) raptor_uri_as_string(t->value.literal.datatype);
-				return triplestore_new_term(TERM_TYPED_LITERAL, value, vtype);
+				
+				// TODO: XXX
+				rdf_term_t* datatype	= triplestore_new_term(TERM_IRI, vtype, NULL, 0);
+				const char* dtstring	= triplestore_term_to_string(store, datatype);
+				nodeid_t datatypeid		= triplestore_add_term(store, datatype);
+// 				fprintf(stderr, "DT %6"PRIu32" %s\n", datatypeid, dtstring);
+				
+				return triplestore_new_term(TERM_TYPED_LITERAL, value, NULL, datatypeid);
 			} else {
-				return triplestore_new_term(TERM_XSDSTRING_LITERAL, value, NULL);
+				return triplestore_new_term(TERM_XSDSTRING_LITERAL, value, NULL, 0);
 			}
 		default:
 			fprintf(stderr, "*** unknown node type %d during import\n", t->type);
@@ -306,10 +322,10 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 		
 		graph_node_t node	= { ._term = item->_term, .mtime = 0, .out_edge_head = 0, .in_edge_head = 0 };
 		t->graph[item->id]	= node;
-// 		fprintf(stdout, "+ %6"PRIu32" %s\n", item->id, triplestore_term_to_string(term));
+// 		fprintf(stdout, "+ %6"PRIu32" %s\n", item->id, triplestore_term_to_string(t, term));
 	} else {
 		free_rdf_term(myterm);
-// 		fprintf(stdout, "  %6"PRIu32" %s\n", item->id, triplestore_term_to_string(term));
+// 		fprintf(stdout, "  %6"PRIu32" %s\n", item->id, triplestore_term_to_string(t, term));
 	}
 	return item->id;
 }
@@ -322,9 +338,9 @@ static void parser_handle_triple (void* user_data, raptor_statement* triple) {
 	
 	pctx->count++;
 
-	nodeid_t s	= triplestore_add_term(pctx->store, term_from_raptor_term(triple->subject));
-	nodeid_t p	= triplestore_add_term(pctx->store, term_from_raptor_term(triple->predicate));
-	nodeid_t o	= triplestore_add_term(pctx->store, term_from_raptor_term(triple->object));
+	nodeid_t s	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->subject));
+	nodeid_t p	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->predicate));
+	nodeid_t o	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->object));
 	if (triplestore_add_triple(pctx->store, s, p, o, pctx->timestamp)) {
 		pctx->error++;
 		return;
@@ -539,7 +555,7 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^bloc
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
 	rdf_term_t* subject		= t->graph[s]._term;
 	if (subject == NULL) assert(0);
-	char* ss		= triplestore_term_to_string(subject);
+	char* ss		= triplestore_term_to_string(t, subject);
 	fprintf(f, "%s", ss);
 	if (newline) {
 		fprintf(f, "\n");
