@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <time.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -153,8 +154,23 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	t->edges_used	= 0;
 	t->nodes_used	= 0;
 	t->out_edges	= calloc(sizeof(index_list_element_t), max_edges);
+	if (t->out_edges == NULL) {
+		fprintf(stderr, "*** Failed to allocate memory for triplestore edges\n");
+		return NULL;
+	}
 	t->in_edges		= calloc(sizeof(index_list_element_t), max_edges);
+	if (t->in_edges == NULL) {
+		free(t->out_edges);
+		fprintf(stderr, "*** Failed to allocate memory for triplestore edges\n");
+		return NULL;
+	}
 	t->graph		= calloc(sizeof(graph_node_t), max_nodes);
+	if (t->graph == NULL) {
+		free(t->out_edges);
+		free(t->in_edges);
+		fprintf(stderr, "*** Failed to allocate memory for triplestore graph\n");
+		return NULL;
+	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
 	return t;
 }
@@ -309,8 +325,8 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 	
 // 	if (1) {
 		int fd	= open(filename, O_RDONLY);
-		fcntl(fd, F_NOCACHE, 1);
-		fcntl(fd, F_RDAHEAD, 1);
+// 		fcntl(fd, F_NOCACHE, 1);
+// 		fcntl(fd, F_RDAHEAD, 1);
 		FILE* f	= fdopen(fd, "r");
 		raptor_parser_parse_file_stream(rdf_parser, f, filename, base_uri);
 		fclose(f);

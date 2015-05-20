@@ -232,7 +232,8 @@ triplestore_build_struct (SV* self)
 	PREINIT:
 		triplestore_t *t;
 	CODE:
-		if (!(t = new_triplestore(268435456, 268435456))) {
+ 		// if (!(t = new_triplestore(268435456, 268435456))) {
+		if (!(t = new_triplestore(25000000, 25000000))) {
 			croak("Failed to create new triplestore");
 		}
 		// triplestore__load_file(t, "/Users/greg/foaf.ttl", 1, 1);

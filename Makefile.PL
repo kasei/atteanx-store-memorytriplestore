@@ -17,9 +17,9 @@ my %WriteMakefileArgs	= (
     LICENSE							=> 'gpl_2',
     MIN_PERL_VERSION				=> 5.014,
     PREREQ_PM => {
+    	'Attean'					=> 0.004,
     	'Moose'						=> 0,
     	'Params::Util'				=> 0,
-    	'Attean'					=> 0,
     	'XS::Object::Magic'			=> 0,
     	'Moo'						=> 0,
     	'Type::Tiny'				=> 0,
@@ -38,4 +38,12 @@ $WriteMakefileArgs{depend}{'MemoryTripleStore.xs'} = "avl.o triplestore.o";
 $WriteMakefileArgs{depend}{'triplestore.c'} = "triplestore.h avl.h avl.c";
 $WriteMakefileArgs{depend}{'avl.c'} = "avl.h";
 
-WriteMakefile( %WriteMakefileArgs );
+my @CCFLAGS	= ('-g', '-fblocks');
+my @LIBS	= '-lBlocksRuntime';
+
+$WriteMakefileArgs{CCFLAGS}	.= join(' ', '', @CCFLAGS);
+$WriteMakefileArgs{LIBS}	.= join(' ', '', @LIBS);
+
+WriteMakefile(
+	%WriteMakefileArgs,
+);
