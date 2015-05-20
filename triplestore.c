@@ -273,11 +273,8 @@ static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t) {
 			} else if (t->value.literal.datatype) {
 				vtype	= (char*) raptor_uri_as_string(t->value.literal.datatype);
 				
-				// TODO: XXX
 				rdf_term_t* datatype	= triplestore_new_term(TERM_IRI, vtype, NULL, 0);
-				const char* dtstring	= triplestore_term_to_string(store, datatype);
 				nodeid_t datatypeid		= triplestore_add_term(store, datatype);
-// 				fprintf(stderr, "DT %6"PRIu32" %s\n", datatypeid, dtstring);
 				
 				return triplestore_new_term(TERM_TYPED_LITERAL, value, NULL, datatypeid);
 			} else {
