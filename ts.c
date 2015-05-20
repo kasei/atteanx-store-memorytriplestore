@@ -33,7 +33,7 @@ int triplestore_match_terms(triplestore_t* t, const char* pattern, int64_t limit
 
 	int64_t count	= 0;
 	for (nodeid_t s = 1; s < t->nodes_used; s++) {
-		char* string		= triplestore_term_to_string(t->graph[s]._term);
+		char* string		= triplestore_term_to_string(t, t->graph[s]._term);
 // 			fprintf(stderr, "matching %s =~ %s\n", string, pattern);
 		int OVECCOUNT	= 30;
 		int ovector[OVECCOUNT];
@@ -89,9 +89,9 @@ int triplestore_print_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t 
 	if (predicate == NULL) assert(0);
 	if (object == NULL) assert(0);
 
-	char* ss		= triplestore_term_to_string(subject);
-	char* sp		= triplestore_term_to_string(predicate);
-	char* so		= triplestore_term_to_string(object);
+	char* ss		= triplestore_term_to_string(t, subject);
+	char* sp		= triplestore_term_to_string(t, predicate);
+	char* so		= triplestore_term_to_string(t, object);
 	fprintf(f, "%s %s %s .\n", ss, sp, so);
 	free(ss);
 	free(sp);
@@ -103,10 +103,10 @@ int triplestore_print_ntriples(triplestore_t* t, FILE* f) {
 	for (nodeid_t s = 1; s < t->nodes_used; s++) {
 		nodeid_t idx	= t->graph[s].out_edge_head;
 		while (idx != 0) {
-			nodeid_t p	= t->out_edges[idx].p;
-			nodeid_t o	= t->out_edges[idx].o;
+			nodeid_t p	= t->edges[idx].p;
+			nodeid_t o	= t->edges[idx].o;
 			triplestore_print_triple(t, s, p, o, f);
-			idx			= t->out_edges[idx].next;
+			idx			= t->edges[idx].next_out;
 		}
 	}
 	return 0;
@@ -115,7 +115,7 @@ int triplestore_print_ntriples(triplestore_t* t, FILE* f) {
 int triplestore_node_dump(triplestore_t* t, int64_t limit, FILE* f) {
 	fprintf(f, "# %"PRIu32" nodes\n", t->nodes_used);
 	for (nodeid_t s = 1; s < t->nodes_used; s++) {
-		char* ss		= triplestore_term_to_string(t->graph[s]._term);
+		char* ss		= triplestore_term_to_string(t, t->graph[s]._term);
 		fprintf(f, "N %07"PRIu32" %s (%"PRIu32", %"PRIu32")\n", s, ss, t->graph[s].in_degree, t->graph[s].out_degree);
 		free(ss);
 		if (limit > 0 && s == limit) break;
@@ -129,10 +129,10 @@ int triplestore_edge_dump(triplestore_t* t, int64_t limit, FILE* f) {
 	for (nodeid_t s = 1; s < t->nodes_used; s++) {
 		nodeid_t idx	= t->graph[s].out_edge_head;
 		while (idx != 0) {
-			nodeid_t p	= t->out_edges[idx].p;
-			nodeid_t o	= t->out_edges[idx].o;
+			nodeid_t p	= t->edges[idx].p;
+			nodeid_t o	= t->edges[idx].o;
 			fprintf(f, "E %07"PRIu32" %07"PRIu32" %07"PRIu32"\n", s, p, o);
-			idx			= t->out_edges[idx].next;
+			idx			= t->edges[idx].next_out;
 			count++;
 			if (limit > 0 && count == limit) break;
 		}
@@ -233,7 +233,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		const char* pattern	= argv[++i];
 		triplestore_match_terms(t, pattern, ctx->limit, ^(nodeid_t id) {
 			if (f != NULL) {
-				char* string		= triplestore_term_to_string(t->graph[id]._term);
+				char* string		= triplestore_term_to_string(t, t->graph[id]._term);
 				fprintf(f, "%-7"PRIu32" %s\n", id, string);
 				free(string);
 			}
@@ -364,7 +364,7 @@ int main (int argc, char** argv) {
 		fprintf(stderr, "Importing %s\n", filename);
 	}
 	
-	triplestore_load_file(t, filename, ctx.print, ctx.verbose);
+	triplestore__load_file(t, filename, ctx.print, ctx.verbose);
 	if (ctx.error) {
 		return 1;
 	}
