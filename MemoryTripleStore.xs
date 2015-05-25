@@ -299,14 +299,16 @@ triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV
 		SV** svp;
 		char* ptr;
 		bgp_t* bgp;
+		query_t* query;
 		IV iv;
 	CODE:
 		bgp = triplestore_new_bgp(t, variables, triples);
+		query = triplestore_new_query(t, variables);
 		for (i = 1; i <= variables; i++) {
 			svp	= av_fetch(names, i, 0);
 			ptr = SvPV_nolen(*svp);
 			triplestore_bgp_set_variable_name(bgp, i, ptr);
-// 			fprintf(stderr, "name[%d] = '%s'\n", i, ptr);
+			triplestore_query_set_variable_name(query, i, ptr);
 		}
 		for (i = 0; i < triples; i++) {
 			SV **svs, **svp, **svo;
@@ -318,12 +320,12 @@ triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV
 			int64_t o	= (int64_t) SvIV(*svo);
 			triplestore_bgp_set_triple_nodes(bgp, i, s, p, o);
 		}
-// 		triplestore_print_bgp(t, bgp, stderr);
-		triplestore_bgp_match(t, bgp, -1, ^(nodeid_t* final_match){
-			handle_new_result_object(t, closure, bgp->variables, bgp->variable_names, final_match);
+		triplestore_query_add_op(query, QUERY_BGP, bgp);
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
 			return 0;
 		});
-		triplestore_free_bgp(bgp);
+		triplestore_free_query(query);
 
 void
 triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)
