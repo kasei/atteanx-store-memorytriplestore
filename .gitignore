@@ -10,3 +10,5 @@ Makefile
 MemoryTripleStore.c
 blib
 pm_to_blib
+*.nt
+*.tar.gz
