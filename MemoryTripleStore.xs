@@ -194,13 +194,13 @@ handle_new_triple_object (SV* closure, rdf_term_t* subject, rdf_term_t* predicat
 }
 
 void
-handle_new_result_object (triplestore_t* t, SV* closure, const bgp_t* bgp, nodeid_t* match) {
+handle_new_result_object (triplestore_t* t, SV* closure, int variables, char** variable_names, nodeid_t* match) {
 	HV*	hash	= newHV();
-	for (int j = 1; j <= bgp->variables; j++) {
+	for (int j = 1; j <= variables; j++) {
 		nodeid_t id	= match[j];
 		rdf_term_t* term	= t->graph[id]._term;
 		SV* object			= rdf_term_to_object(term);
-		const char* key		= bgp->variable_names[j];
+		const char* key		= variable_names[j];
 		hv_store(hash, key, strlen(key), object, 0);
 	}
 	
@@ -298,31 +298,32 @@ triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV
 		int i;
 		SV** svp;
 		char* ptr;
-		bgp_t bgp;
+		bgp_t* bgp;
 		IV iv;
 	CODE:
-		bgp.variables		= variables;
-		bgp.triples			= triples;
-		bgp.variable_names	= calloc(sizeof(char*), variables+1);
-		bgp.nodes			= calloc(sizeof(int64_t), 3 * bgp.triples);
+		bgp = triplestore_new_bgp(t, variables, triples);
 		for (i = 1; i <= variables; i++) {
 			svp	= av_fetch(names, i, 0);
 			ptr = SvPV_nolen(*svp);
-			bgp.variable_names[i] = ptr;
+			triplestore_bgp_set_variable_name(bgp, i, ptr);
 // 			fprintf(stderr, "name[%d] = '%s'\n", i, ptr);
 		}
-		for (i = 0; i < 3*triples; i++) {
-			svp	= av_fetch(ids, i, 0);
-			iv = SvIV(*svp);
-			bgp.nodes[i] = (int64_t) iv;
+		for (i = 0; i < triples; i++) {
+			SV **svs, **svp, **svo;
+			svs			= av_fetch(ids, 3*i+0, 0);
+			svp			= av_fetch(ids, 3*i+1, 0);
+			svo			= av_fetch(ids, 3*i+2, 0);
+			int64_t s	= (int64_t) SvIV(*svs);
+			int64_t p	= (int64_t) SvIV(*svp);
+			int64_t o	= (int64_t) SvIV(*svo);
+			triplestore_bgp_set_triple_nodes(bgp, i, s, p, o);
 		}
-// 		triplestore_print_bgp(t, &bgp, stderr);
-		triplestore_bgp_match(t, &bgp, -1, ^(nodeid_t* final_match){
-			handle_new_result_object(t, closure, &bgp, final_match);
+// 		triplestore_print_bgp(t, bgp, stderr);
+		triplestore_bgp_match(t, bgp, -1, ^(nodeid_t* final_match){
+			handle_new_result_object(t, closure, bgp->variables, bgp->variable_names, final_match);
 			return 0;
 		});
-		free(bgp.variable_names);
-		free(bgp.nodes);
+		triplestore_free_bgp(bgp);
 
 void
 triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)

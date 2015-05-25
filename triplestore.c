@@ -223,6 +223,65 @@ int triplestore_expand_nodes(triplestore_t* t) {
 
 #pragma mark -
 
+query_t* triplestore_new_query(triplestore_t* t, int variables) {
+	query_t* query			= calloc(sizeof(query_t), 1);
+	query->variables		= variables;
+	query->variable_names	= calloc(sizeof(char*), variables+1);
+	return query;
+}
+
+int triplestore_free_query(query_t* query) {
+	for (int i = 0; i < query->variables; i++) {
+		free(query->variable_names[i]);
+	}
+	free(query->variable_names);
+	free(query);
+	return 0;
+}
+
+int triplestore_query_set_variable_name(query_t* query, int variable, char* name) {
+	query->variable_names[variable]	= calloc(1, 1+strlen(name));
+	strcpy(query->variable_names[variable], name);
+	return 0;
+}
+
+#pragma mark -
+
+bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples) {
+	bgp_t* bgp		= calloc(sizeof(bgp_t), 1);
+	bgp->variables	= variables;
+	bgp->triples	= triples;
+	bgp->variable_names	= calloc(sizeof(char*), variables+1);
+	bgp->nodes			= calloc(sizeof(int64_t), 3 * triples);
+	return bgp;
+}
+
+int triplestore_free_bgp(bgp_t* bgp) {
+	for (int i = 0; i < bgp->variables; i++) {
+		free(bgp->variable_names[i]);
+	}
+	free(bgp->nodes);
+	free(bgp->variable_names);
+	free(bgp);
+	return 0;
+}
+
+int triplestore_bgp_set_variable_name(bgp_t* bgp, int variable, char* name) {
+	bgp->variable_names[variable]	= calloc(1, 1+strlen(name));
+	strcpy(bgp->variable_names[variable], name);
+	return 0;
+}
+
+int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t p, int64_t o) {
+	int i	= 3 * triple;
+	bgp->nodes[i+0]	= s;
+	bgp->nodes[i+1]	= p;
+	bgp->nodes[i+2]	= o;
+	return 0;
+}
+
+#pragma mark -
+
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp) {
 	if (t->edges_used >= t->edges_alloc) {
 		if (triplestore_expand_edges(t)) {
@@ -463,7 +522,6 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 }
 
 int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
-	// TODO: Fix cardinality issues here. BGP results should always be unique w.r.t. variables (negative numbers in bgp[])
 	if (current_triple == bgp->triples) {
 		return block(current_match);
 	}
@@ -481,6 +539,7 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 	if (s < 0) {
 		if (current_match[sv] > 0) {
 			s	= current_match[sv];
+// 			fprintf(stderr, "- carrying over match of subject (variable %"PRId64"): %"PRId64"\n", sv, s);
 			if (s == 0) {
 				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", sv);
 				assert(0);
@@ -492,6 +551,7 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 	if (p < 0) {
 		if (current_match[pv] > 0) {
 			p	= current_match[pv];
+// 			fprintf(stderr, "- carrying over match of predicate (variable %"PRId64"): %"PRId64"\n", pv, p);
 			if (p == 0) {
 				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", pv);
 				assert(0);
@@ -503,6 +563,7 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 	if (o < 0) {
 		if (current_match[ov] > 0) {
 			o	= current_match[ov];
+// 			fprintf(stderr, "- carrying over match of object (variable %"PRId64"): %"PRId64"\n", ov, o);
 			if (o == 0) {
 				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", ov);
 				assert(0);
@@ -591,3 +652,5 @@ void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f) {
 		fprintf(f, "\n");
 	}
 }
+
+

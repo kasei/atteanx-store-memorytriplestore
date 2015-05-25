@@ -43,6 +43,21 @@ typedef struct graph_node_s {
 	
 } graph_node_t;
 
+typedef enum {
+	QUERY_BGP,
+} query_type_t;
+
+typedef struct query_op_s {
+	query_type_t type;
+	void* ptr;
+} query_op_t;
+
+typedef struct query_s {
+	int variables;
+	char** variable_names;
+	query_op_t* root;
+} query_t;
+
 typedef struct bgp_s {
 	int triples;
 	int64_t* nodes;
@@ -84,3 +99,17 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^bloc
 
 void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f);
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline);
+
+// Queries
+query_t* triplestore_new_query(triplestore_t* t, int variables);
+
+// BGPs
+bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples);
+int triplestore_free_bgp(bgp_t* bgp);
+int triplestore_bgp_set_variable_name(bgp_t* bgp, int variable, char* name);
+int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t p, int64_t o);
+
+
+query_t* triplestore_new_query(triplestore_t* t, int variables);
+int triplestore_free_query(query_t* query);
+int triplestore_query_set_variable_name(query_t* query, int variable, char* name);
