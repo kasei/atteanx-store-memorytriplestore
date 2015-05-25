@@ -25,6 +25,62 @@ sub create_store {
 }
 
 with 'Test::Attean::TripleStore';
+
+
+test 'match_bgp' => sub {
+	my $self	= shift;
+	my @triples;
+	{
+		my $t1		= triple(iri('http://example.org/s'), iri('http://example.org/p'), iri('http://example.org/o'));
+		my $t2		= triple(iri('http://example.org/x'), iri('http://example.org/y'), iri('http://example.org/z'));
+		push(@triples, $t1, $t2);
+		foreach (1,10,20,50) {
+			push(@triples, triple(iri('http://example.org/z'), iri('http://example.org/p'), literal($_)));
+		}
+	}
+	my $store	= $self->create_store(triples => \@triples);
+
+	{
+		note('1-triple BGP');
+		my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://example.org/p'), variable('o1'));
+		my $iter	= $store->match_bgp($t1);
+		my @r		= $iter->elements;
+		is(scalar(@r), 5, 'expected 1-triple BGP result size');
+		foreach my $r (@r) {
+			my $s	= $r->value('s');
+			like($s->value, qr<^http://example.org/[sz]$>, 'expected BGP match IRI value');
+		}
+	}
+	
+	{
+		note('2-triple BGP with IRI endpoint');
+		my $t1		= Attean::TriplePattern->new(iri('http://example.org/x'), variable('p1'), variable('o'));
+		my $t2		= Attean::TriplePattern->new(variable('o'), variable('p2'), variable('end'));
+		my $iter	= $store->match_bgp($t1, $t2);
+		my @r		= $iter->elements;
+		is(scalar(@r), 4, 'expected 2-triple BGP result size');
+		foreach my $r (@r) {
+			my $end		= $r->value('end');
+			like($end->value, qr<^(1|10|20|50)$>, 'expected BGP match literal value');
+		}
+	}
+	
+	{
+		note('2-triple BGP with variable endpoints');
+		my $t1		= Attean::TriplePattern->new(variable('start'), variable('p1'), variable('o'));
+		my $t2		= Attean::TriplePattern->new(variable('o'), variable('p2'), variable('end'));
+		my $iter	= $store->match_bgp($t1, $t2);
+		my @r		= $iter->elements;
+		is(scalar(@r), 4, 'expected 2-triple BGP result size');
+		foreach my $r (@r) {
+			my $start	= $r->value('start');
+			my $end		= $r->value('end');
+			is($start->value, 'http://example.org/x');
+			like($end->value, qr<^(1|10|20|50)$>, 'expected BGP match literal value');
+		}
+	}
+};
+
 run_me; # run these Test::Attean tests
 
 # {
