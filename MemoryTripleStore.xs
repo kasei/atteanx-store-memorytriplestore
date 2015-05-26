@@ -225,6 +225,15 @@ BOOT:
 	EXPORT_FLAG(TERM_XSDSTRING_LITERAL);
 	EXPORT_FLAG(TERM_LANG_LITERAL);
 	EXPORT_FLAG(TERM_TYPED_LITERAL);
+	EXPORT_FLAG(FILTER_ISIRI);
+	EXPORT_FLAG(FILTER_ISLITERAL);
+	EXPORT_FLAG(FILTER_ISBLANK);
+	EXPORT_FLAG(FILTER_SAMETERM);
+	EXPORT_FLAG(FILTER_REGEX);
+	EXPORT_FLAG(FILTER_LANGMATCHES);
+	EXPORT_FLAG(FILTER_CONTAINS);
+	EXPORT_FLAG(FILTER_STRSTARTS);
+	EXPORT_FLAG(FILTER_STRENDS);
 }
 
 int
@@ -291,6 +300,107 @@ triplestore_DESTROY (triplestore_t *store)
 	CODE:
 //		 fprintf(stderr, "destroying triplestore: %p\n", store);
 	  free_triplestore(store);
+
+void
+triplestore_match_bgp_with_filter_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, AV* filters, SV* closure)
+	INIT:
+		int i;
+		SV** svp;
+		char* ptr;
+		bgp_t* bgp;
+		query_t* query;
+		IV iv;
+	CODE:
+		bgp = triplestore_new_bgp(t, variables, triples);
+		query = triplestore_new_query(t, variables);
+		for (i = 1; i <= variables; i++) {
+			svp	= av_fetch(names, i, 0);
+			ptr = SvPV_nolen(*svp);
+			triplestore_query_set_variable_name(query, i, ptr);
+		}
+		for (i = 0; i < triples; i++) {
+			SV **svs, **svp, **svo;
+			svs			= av_fetch(ids, 3*i+0, 0);
+			svp			= av_fetch(ids, 3*i+1, 0);
+			svo			= av_fetch(ids, 3*i+2, 0);
+			int64_t s	= (int64_t) SvIV(*svs);
+			int64_t p	= (int64_t) SvIV(*svp);
+			int64_t o	= (int64_t) SvIV(*svo);
+			triplestore_bgp_set_triple_nodes(bgp, i, s, p, o);
+		}
+		triplestore_query_add_op(query, QUERY_BGP, bgp);
+		
+		SSize_t len	= av_len(filters);
+		if (len > 0) {
+			for (i = 0; i < len; i+=2) {
+				SV** key	= av_fetch(filters, i+0, 0);
+				SV** val	= av_fetch(filters, i+1, 0);
+				filter_type_t type	= (filter_type_t) SvIV(*key);
+				if (!SvROK(*val) || SvTYPE(SvRV(*val)) != SVt_PVHV) {
+					croak("Not a hash in REGEX filter?");
+					continue;
+				}
+				HV* hash	= (HV*) SvRV(*val);
+				if (type == FILTER_REGEX) {
+					SV** var	= hv_fetch(hash, "variable", 8, 0);
+					SV** pat	= hv_fetch(hash, "pattern", 7, 0);
+					SV** fl		= hv_fetch(hash, "flags", 5, 0);
+					if (!var) {
+						croak("No variable in REGEX filter");
+						continue;
+					}
+					if (!pat) {
+						croak("No pattern in REGEX filter");
+						continue;
+					}
+					if (!fl) {
+						croak("No flags in REGEX filter");
+						continue;
+					}
+					
+					int64_t varid	= (int64_t) SvIV(*var);
+					char* pattern	= SvPV_nolen(*pat);
+					char* flags		= SvPV_nolen(*fl);
+					query_filter_t* filter	= triplestore_new_filter(FILTER_REGEX, varid, pattern, flags);
+					// fprintf(stderr, "Adding REGEX filter: %s =~ /%s/%s\n", query->variable_names[-varid], pattern, flags);
+					triplestore_query_add_op(query, QUERY_FILTER, filter);
+				} else if (type == FILTER_ISIRI || type == FILTER_ISLITERAL || type == FILTER_ISBLANK) {
+					SV** var	= hv_fetch(hash, "variable", 8, 0);
+					if (!var) {
+						croak("No variable in ISIRI/ISLITERAL/ISBLANK filter");
+						continue;
+					}
+					int64_t varid	= (int64_t) SvIV(*var);
+					query_filter_t* filter	= triplestore_new_filter(type, varid);
+					triplestore_query_add_op(query, QUERY_FILTER, filter);
+				} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS) {
+					SV** var	= hv_fetch(hash, "variable", 8, 0);
+					SV** pat	= hv_fetch(hash, "pattern", 7, 0);
+					if (!var) {
+						croak("No variable in STSTARTS/STRENDS filter");
+						continue;
+					}
+					if (!pat) {
+						croak("No pattern in STSTARTS/STRENDS filter");
+						continue;
+					}
+					int64_t varid	= (int64_t) SvIV(*var);
+					char* pattern	= SvPV_nolen(*pat);
+					query_filter_t* filter	= triplestore_new_filter(FILTER_STRSTARTS, varid, pattern);
+					triplestore_query_add_op(query, QUERY_FILTER, filter);
+				} else {
+					croak("Unexpected filter type %d", type);
+					return;
+				}
+			}
+		}
+		
+		// triplestore_print_query(t, query, stderr);
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
+			return 0;
+		});
+		triplestore_free_query(query);
 
 void
 triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, int re_var, char* pattern, char* flags, SV* closure)

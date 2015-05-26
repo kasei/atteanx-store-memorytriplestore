@@ -23,7 +23,7 @@ typedef enum {
 } query_type_t;
 
 typedef enum {
-	FILTER_ISIRI,		// ISIRI(?var)
+	FILTER_ISIRI = 1,	// ISIRI(?var)
 	FILTER_ISLITERAL,	// ISLITERAL(?var)
 	FILTER_ISBLANK,		// ISBLANK(?var)
 	FILTER_SAMETERM,	// SAMETERM(?var, CONST) or SAMETERM(?var, ?var)
