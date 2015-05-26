@@ -45,6 +45,7 @@ double triplestore_elapsed_time ( double start ) {
 }
 
 #pragma mark -
+#pragma mark RDF Terms
 
 rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype, nodeid_t vid ) {
 	rdf_term_t* t	= calloc(sizeof(rdf_term_t), 1);
@@ -161,6 +162,7 @@ static void _hx_free_node_item (void *avl_item, void *avl_param) {
 }
 
 #pragma mark -
+#pragma mark Triplestore
 
 triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	triplestore_t* t	= (triplestore_t*) calloc(sizeof(triplestore_t), 1);
@@ -222,77 +224,90 @@ int triplestore_expand_nodes(triplestore_t* t) {
 }
 
 #pragma mark -
+#pragma mark Filters
 
-query_t* triplestore_new_query(triplestore_t* t, int variables) {
-	query_t* query			= calloc(sizeof(query_t), 1);
-	query->variables		= variables;
-	query->variable_names	= calloc(sizeof(char*), variables+1);
-	return query;
-}
-
-int triplestore_free_query_op(query_op_t* op) {
-	if (op->type == QUERY_BGP) {
-		triplestore_free_bgp(op->ptr);
-		free(op);
+query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
+	va_list ap;
+	va_start(ap, type);
+	query_filter_t* filter	= calloc(1, sizeof(query_filter_t));
+	filter->type	= type;
+	if (type == FILTER_ISIRI || type == FILTER_ISLITERAL || type == FILTER_ISBLANK) {
+		int64_t id		= va_arg(ap, int64_t);
+		filter->node1	= id;
+	} else if (type == FILTER_SAMETERM) {
+		filter->node1		= va_arg(ap, int64_t);
+		filter->node2		= va_arg(ap, int64_t);
 	} else {
-		fprintf(stderr, "Unrecognized query operation %d\n", op->type);
-		return 1;
+		fprintf(stderr, "*** Unexpected filter type %d\n", type);
 	}
+	return filter;
+}
+
+int triplestore_free_filter(query_filter_t* filter) {
+	if (filter->string2) {
+		free(filter->string2);
+	}
+	if (filter->string3) {
+		free(filter->string3);
+	}
+	free(filter);
 	return 0;
 }
 
-int triplestore_free_query(query_t* query) {
-	for (int i = 0; i < query->variables; i++) {
-		free(query->variable_names[i]);
+int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+	int64_t node1;
+	int64_t node2;
+	rdf_term_t* term;
+	switch (filter->type) {
+		case FILTER_ISIRI:
+			if (t->graph[ current_match[-(filter->node1)] ]._term->type != TERM_IRI) {
+				return 0;
+			}
+			break;
+		case FILTER_ISLITERAL:
+			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+			if (!(term->type == TERM_XSDSTRING_LITERAL || term->type == TERM_LANG_LITERAL || term->type == TERM_TYPED_LITERAL)) {
+				return 0;
+			}
+			break;
+		case FILTER_ISBLANK:
+			if (t->graph[ current_match[-(filter->node1)] ]._term->type != TERM_BLANK) {
+				return 0;
+			}
+			break;
+		case FILTER_SAMETERM:
+			node1	= filter->node1;
+			node2	= filter->node2;
+			if (node1 < 0) {
+				node1	= current_match[-node1];
+			}
+			if (node2 < 0) {
+				node2	= current_match[-node2];
+			}
+			if (node1 != node2) {
+				return 0;
+			}
+		default:
+			fprintf(stderr, "*** Unrecognized filter type %d\n", filter->type);
 	}
-	free(query->variable_names);
 	
-	if (query->root) {
-		triplestore_free_query_op(query->root);
-	}
-	
-	free(query);
-	return 0;
-}
-
-int triplestore_query_set_variable_name(query_t* query, int variable, char* name) {
-	query->variable_names[variable]	= calloc(1, 1+strlen(name));
-	strcpy(query->variable_names[variable], name);
-	return 0;
-}
-
-int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
-	query_op_t* op	= calloc(1, sizeof(query_op_t));
-	op->type	= type;
-	op->ptr		= ptr;
-	query->root	= op;
-	return 0;
+	// filter evaluated to true
+	return block(current_match);
 }
 
 #pragma mark -
+#pragma mark BGPs
 
 bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples) {
 	bgp_t* bgp		= calloc(sizeof(bgp_t), 1);
-	bgp->variables	= variables;
 	bgp->triples	= triples;
-	bgp->variable_names	= calloc(sizeof(char*), variables+1);
-	bgp->nodes			= calloc(sizeof(int64_t), 3 * triples);
+	bgp->nodes		= calloc(sizeof(int64_t), 3 * triples);
 	return bgp;
 }
 
 int triplestore_free_bgp(bgp_t* bgp) {
-	for (int i = 0; i < bgp->variables; i++) {
-		free(bgp->variable_names[i]);
-	}
 	free(bgp->nodes);
-	free(bgp->variable_names);
 	free(bgp);
-	return 0;
-}
-
-int triplestore_bgp_set_variable_name(bgp_t* bgp, int variable, char* name) {
-	bgp->variable_names[variable]	= calloc(1, 1+strlen(name));
-	strcpy(bgp->variable_names[variable], name);
 	return 0;
 }
 
@@ -302,6 +317,187 @@ int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t 
 	bgp->nodes[i+1]	= p;
 	bgp->nodes[i+2]	= o;
 	return 0;
+}
+
+int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+	if (current_triple == bgp->triples) {
+		return block(current_match);
+	}
+	
+	int offset	= 3*current_triple;
+	int64_t s	= bgp->nodes[offset];
+	int64_t p	= bgp->nodes[offset+1];
+	int64_t o	= bgp->nodes[offset+2];
+	int64_t sv	= -s;
+	int64_t pv	= -p;
+	int64_t ov	= -o;
+	int reset_s	= 0;
+	int reset_p	= 0;
+	int reset_o	= 0;
+	if (s < 0) {
+		if (current_match[sv] > 0) {
+			s	= current_match[sv];
+// 			fprintf(stderr, "- carrying over match of subject (variable %"PRId64"): %"PRId64"\n", sv, s);
+			if (s == 0) {
+				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", sv);
+				assert(0);
+			}
+		} else {
+			reset_s	= 1;
+		}
+	}
+	if (p < 0) {
+		if (current_match[pv] > 0) {
+			p	= current_match[pv];
+// 			fprintf(stderr, "- carrying over match of predicate (variable %"PRId64"): %"PRId64"\n", pv, p);
+			if (p == 0) {
+				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", pv);
+				assert(0);
+			}
+		} else {
+			reset_p	= 1;
+		}
+	}
+	if (o < 0) {
+		if (current_match[ov] > 0) {
+			o	= current_match[ov];
+// 			fprintf(stderr, "- carrying over match of object (variable %"PRId64"): %"PRId64"\n", ov, o);
+			if (o == 0) {
+				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", ov);
+				assert(0);
+			}
+		} else {
+			reset_o	= 1;
+		}
+	}
+	
+	if (o == 0) {
+		fprintf(stderr, "Got unexpected zero node from nodes[%d]\n", offset+2);
+		assert(0);
+	}
+// 	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
+	int r	= triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+// 		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
+		if (s < 0) {
+			current_match[-s]	= _s;
+		}
+		if (p < 0) {
+			current_match[-p]	= _p;
+		}
+		if (o < 0) {
+			current_match[-o]	= _o;
+		}
+		return _triplestore_bgp_match(t, bgp, current_triple+1, current_match, block);
+	});
+	
+	if (reset_s) current_match[sv]	= 0;
+	if (reset_p) current_match[pv]	= 0;
+	if (reset_o) current_match[ov]	= 0;
+	
+	return r;
+}
+
+// final_match is a node ID array with final_match[0] representing the number of following node IDs
+int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(nodeid_t* final_match)) {
+	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+variables);
+	current_match[0]	= variables;
+	int r	= _triplestore_bgp_match(t, bgp, 0, current_match, block);
+	free(current_match);
+	return r;
+}
+
+#pragma mark -
+#pragma mark Query
+
+query_t* triplestore_new_query(triplestore_t* t, int variables) {
+	query_t* query			= calloc(sizeof(query_t), 1);
+	query->variables		= variables;
+	query->variable_names	= calloc(sizeof(char*), variables+1);
+	return query;
+}
+
+int triplestore_free_query_op(query_op_t* op) {
+	if (op->next) {
+		triplestore_free_query_op(op->next);
+	}
+	
+	switch (op->type) {
+		case QUERY_BGP:
+			triplestore_free_bgp(op->ptr);
+			break;
+		case QUERY_FILTER:
+			triplestore_free_filter(op->ptr);
+			break;
+		default:
+			fprintf(stderr, "Unrecognized query operation %d\n", op->type);
+			return 1;
+	};
+	free(op);
+	return 0;
+}
+
+int triplestore_free_query(query_t* query) {
+	for (int i = 0; i < query->variables; i++) {
+		free(query->variable_names[i]);
+	}
+	free(query->variable_names);
+	
+	if (query->head) {
+		triplestore_free_query_op(query->head);
+	}
+	
+	free(query);
+	return 0;
+}
+
+int triplestore_query_set_variable_name(query_t* query, int variable, const char* name) {
+	query->variable_names[variable]	= calloc(1, 1+strlen(name));
+	strcpy(query->variable_names[variable], name);
+	return 0;
+}
+
+int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
+	query_op_t* op	= calloc(1, sizeof(query_op_t));
+	op->next	= NULL;
+	op->type	= type;
+	op->ptr		= ptr;
+	if (query->tail) {
+		query->tail->next	= op;
+		query->tail			= op;
+	} else {
+		query->head	= op;
+		query->tail	= op;
+	}
+	return 0;
+}
+
+int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+	if (op) {
+		switch (op->type) {
+			case QUERY_BGP:
+				return _triplestore_bgp_match(t, op->ptr, 0, current_match, ^(nodeid_t* final_match){
+					return _triplestore_query_op_match(t, query, op->next, final_match, block);
+				});
+			case QUERY_FILTER:
+				return _triplestore_filter_match(t, op->ptr, current_match, ^(nodeid_t* final_match){
+					return _triplestore_query_op_match(t, query, op->next, final_match, block);
+				});
+			default:
+				fprintf(stderr, "Unrecognized query op in _triplestore_query_op_match: %d\n", op->type);
+				return 1;
+		};
+	} else {
+		block(current_match);
+	}
+	return 0;
+}
+
+int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
+	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+query->variables);
+	current_match[0]	= query->variables;
+	int r	= _triplestore_query_op_match(t, query, query->head, current_match, block);
+	free(current_match);
+	return r;
 }
 
 #pragma mark -
@@ -545,113 +741,8 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 	return 0;
 }
 
-int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
-	if (current_triple == bgp->triples) {
-		return block(current_match);
-	}
-	
-	int offset	= 3*current_triple;
-	int64_t s	= bgp->nodes[offset];
-	int64_t p	= bgp->nodes[offset+1];
-	int64_t o	= bgp->nodes[offset+2];
-	int64_t sv	= -s;
-	int64_t pv	= -p;
-	int64_t ov	= -o;
-	int reset_s	= 0;
-	int reset_p	= 0;
-	int reset_o	= 0;
-	if (s < 0) {
-		if (current_match[sv] > 0) {
-			s	= current_match[sv];
-// 			fprintf(stderr, "- carrying over match of subject (variable %"PRId64"): %"PRId64"\n", sv, s);
-			if (s == 0) {
-				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", sv);
-				assert(0);
-			}
-		} else {
-			reset_s	= 1;
-		}
-	}
-	if (p < 0) {
-		if (current_match[pv] > 0) {
-			p	= current_match[pv];
-// 			fprintf(stderr, "- carrying over match of predicate (variable %"PRId64"): %"PRId64"\n", pv, p);
-			if (p == 0) {
-				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", pv);
-				assert(0);
-			}
-		} else {
-			reset_p	= 1;
-		}
-	}
-	if (o < 0) {
-		if (current_match[ov] > 0) {
-			o	= current_match[ov];
-// 			fprintf(stderr, "- carrying over match of object (variable %"PRId64"): %"PRId64"\n", ov, o);
-			if (o == 0) {
-				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", ov);
-				assert(0);
-			}
-		} else {
-			reset_o	= 1;
-		}
-	}
-	
-	if (o == 0) {
-		fprintf(stderr, "Got unexpected zero node from nodes[%d]\n", offset+2);
-		assert(0);
-	}
-// 	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
-	int r	= triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
-// 		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
-		if (s < 0) {
-			current_match[-s]	= _s;
-		}
-		if (p < 0) {
-			current_match[-p]	= _p;
-		}
-		if (o < 0) {
-			current_match[-o]	= _o;
-		}
-		return _triplestore_bgp_match(t, bgp, current_triple+1, current_match, block);
-	});
-	
-	if (reset_s) current_match[sv]	= 0;
-	if (reset_p) current_match[pv]	= 0;
-	if (reset_o) current_match[ov]	= 0;
-	
-	return r;
-}
-
-// final_match is a node ID array with final_match[0] representing the number of following node IDs
-int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^block)(nodeid_t* final_match)) {
-	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+bgp->variables);
-	current_match[0]	= bgp->variables;
-	int r	= _triplestore_bgp_match(t, bgp, 0, current_match, block);
-	free(current_match);
-	return r;
-}
-
-int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op, int64_t limit, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
-	switch (op->type) {
-		case QUERY_BGP:
-			return _triplestore_bgp_match(t, op->ptr, limit, current_match, block);
-		default:
-			fprintf(stderr, "Unrecognized query op in _triplestore_query_op_match: %d\n", op->type);
-			return 1;
-	};
-	return 0;
-}
-
-int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
-	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+query->variables);
-	current_match[0]	= query->variables;
-	int r	= _triplestore_query_op_match(t, query, query->root, 0, current_match, block);
-	free(current_match);
-	return r;
-}
-
 #pragma mark -
+#pragma mark Print Functions
 
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
 	rdf_term_t* subject		= t->graph[s]._term;
@@ -675,10 +766,40 @@ static void _print_term_or_variable(triplestore_t* t, int variables, char** vari
 	}
 }
 
-void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f) {
-	fprintf(f, "- Variables: %d\n", bgp->variables);
-	for (int v = 1; v <= bgp->variables; v++) {
-		fprintf(f, "  - %s\n", bgp->variable_names[v]);
+void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* filter, FILE* f) {
+	fprintf(f, "Filter: ");
+	switch (filter->type) {
+		case FILTER_ISIRI:
+			fprintf(f, "ISIRI(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ")\n");
+			break;
+		case FILTER_ISLITERAL:
+			fprintf(f, "FILTER_ISLITERAL(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ")\n");
+			break;
+		case FILTER_ISBLANK:
+			fprintf(f, "ISBLANK(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ")\n");
+			break;
+		case FILTER_SAMETERM:
+			fprintf(f, "SAMETERM(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ", ");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node2, f);
+			fprintf(f, ")\n");
+			break;
+		default:
+			fprintf(f, "***UNRECOGNIZED FILTER***\n");
+	}
+}
+
+void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** variable_names, FILE* f) {
+	fprintf(f, "- Variables: %d\n", variables);
+	for (int v = 1; v <= variables; v++) {
+		fprintf(f, "  - %s\n", variable_names[v]);
 	}
 	fprintf(f, "- Triples: %d\n", bgp->triples);
 	for (int i = 0; i < bgp->triples; i++) {
@@ -687,12 +808,35 @@ void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f) {
 		int64_t o	= bgp->nodes[3*i+2];
 		
 		fprintf(f, "  - ");
-		_print_term_or_variable(t, bgp->variables, bgp->variable_names, s, f);
+		_print_term_or_variable(t, variables, variable_names, s, f);
 		fprintf(f, " ");
-		_print_term_or_variable(t, bgp->variables, bgp->variable_names, p, f);
+		_print_term_or_variable(t, variables, variable_names, p, f);
 		fprintf(f, " ");
-		_print_term_or_variable(t, bgp->variables, bgp->variable_names, o, f);
+		_print_term_or_variable(t, variables, variable_names, o, f);
 		fprintf(f, "\n");
+	}
+}
+
+void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op, FILE* f) {
+	if (op->type == QUERY_BGP) {
+		triplestore_print_bgp(t, op->ptr, query->variables, query->variable_names, f);
+	} else if (op->type == QUERY_FILTER) {
+		triplestore_print_filter(t, query, op->ptr, f);
+	} else {
+		fprintf(stderr, "*** Unrecognized query op %d\n", op->type);
+	}
+}
+
+void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f) {
+	fprintf(f, "- Variables: %d\n", query->variables);
+	for (int v = 1; v <= query->variables; v++) {
+		fprintf(f, "  - %s\n", query->variable_names[v]);
+	}
+	
+	query_op_t* op	= query->head;
+	while (op != NULL) {
+		triplestore_print_query_op(t, query, op, f);
+		op	= op->next;
 	}
 }
 

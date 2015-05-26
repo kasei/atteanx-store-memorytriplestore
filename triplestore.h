@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include "avl.h"
 
 typedef uint32_t nodeid_t;
@@ -13,6 +14,26 @@ typedef enum {
 	TERM_LANG_LITERAL			= 4,
 	TERM_TYPED_LITERAL			= 5
 } rdf_term_type_t;
+
+typedef enum {
+	QUERY_BGP,
+	QUERY_FILTER,
+	QUERY_PATH,
+} query_type_t;
+
+typedef enum {
+	FILTER_ISIRI,		// ISIRI(?var)
+	FILTER_ISLITERAL,	// ISLITERAL(?var)
+	FILTER_ISBLANK,		// ISBLANK(?var)
+	FILTER_SAMETERM,	// SAMETERM(?var, CONST) or SAMETERM(?var, ?var)
+	FILTER_REGEX,		// REGEX(?var, "string", "flags")
+    FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")
+    FILTER_CONTAINS,	// CONTAINS(?var, "string")
+    FILTER_STRSTARTS,	// STRENDS(?var, "string")
+    FILTER_STRENDS,		// STRENDS(?var, "string")
+    // Numeric logical testing (var, const)
+    // Date logical testing (var, const)
+} filter_type_t;
 
 typedef struct rdf_term_s {
 	rdf_term_type_t type;
@@ -43,11 +64,8 @@ typedef struct graph_node_s {
 	
 } graph_node_t;
 
-typedef enum {
-	QUERY_BGP,
-} query_type_t;
-
 typedef struct query_op_s {
+	struct query_op_s* next;
 	query_type_t type;
 	void* ptr;
 } query_op_t;
@@ -55,15 +73,26 @@ typedef struct query_op_s {
 typedef struct query_s {
 	int variables;
 	char** variable_names;
-	query_op_t* root;
+	query_op_t* head;
+	query_op_t* tail;
 } query_t;
 
 typedef struct bgp_s {
 	int triples;
 	int64_t* nodes;
-	int variables;
-	char** variable_names;
+	
+	// TODO: remove these, as they will be contained in the enclosing query_t:
+// 	int variables;
+// 	char** variable_names;
 } bgp_t;
+
+typedef struct query_filter_s {
+	filter_type_t type;
+	int64_t node1;	// var
+	int64_t node2;	// var or constant term
+	char* string2;	// REGEX pattern, LANGMATCHES language string, CONTAINS, STRENDS, STRSTARTS pattern string
+	char* string3; 	// REGEX flags
+} query_filter_t;
 
 typedef struct triplestore_s {
 	int edges_alloc;
@@ -95,22 +124,25 @@ nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm);
 int triplestore__load_file(triplestore_t* t, const char* filename, int print, int verbose);
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o));
-int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, int(^block)(nodeid_t* final_match));
+int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(nodeid_t* final_match));
 
-void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, FILE* f);
+void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** variable_names, FILE* f);
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline);
 
 // Queries
 query_t* triplestore_new_query(triplestore_t* t, int variables);
 int triplestore_free_query(query_t* query);
-int triplestore_query_set_variable_name(query_t* query, int variable, char* name);
+int triplestore_query_set_variable_name(query_t* query, int variable, const char* name);
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match));
 
 // BGPs
 bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples);
 int triplestore_free_bgp(bgp_t* bgp);
-int triplestore_bgp_set_variable_name(bgp_t* bgp, int variable, char* name);
 int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t p, int64_t o);
 
 
+
+query_filter_t* triplestore_new_filter(filter_type_t type, ...);
+int triplestore_free_filter(query_filter_t* filter);
+void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);

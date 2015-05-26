@@ -158,26 +158,6 @@ nodeid_t triplestore_print_match(triplestore_t* t, int64_t s, int64_t p, int64_t
 	return count;
 }
 
-nodeid_t triplestore_print_bgp_match(triplestore_t* t, bgp_t* bgp, int64_t limit, FILE* f) {
-	__block nodeid_t count	= 0;
-	triplestore_bgp_match(t, bgp, limit, ^(nodeid_t* final_match){
-		count++;
-		if (f != NULL) {
-			for (int j = 1; j <= bgp->variables; j++) {
-					nodeid_t id	= final_match[j];
-					fprintf(f, "%s=", bgp->variable_names[j]);
-// 					fprintf(f, "%"PRIu32"", id);
-					triplestore_print_term(t, id, f, 0);
-					fprintf(f, " ");
-// 				}
-			}
-			fprintf(f, "\n");
-		}
-		return (limit > 0 && count == limit);
-	});
-	return count;
-}
-
 #pragma mark -
 
 void help(FILE* f) {
@@ -194,6 +174,55 @@ void help(FILE* f) {
 	fprintf(f, "  bgp S1 P1 O1 S2 P2 O2 ...\n");
 	fprintf(f, "  triple S P O\n");
 	fprintf(f, "\n");
+}
+
+query_t* construct_bgp_query(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char** argv, int i) {
+	int triples		= (argc - i) / 3;
+	int variables	= 3 * triples;
+	int next_var	= 1;
+	query_t* query	= triplestore_new_query(t, variables);
+	bgp_t* bgp		= triplestore_new_bgp(t, variables, triples);
+	int j	= 0;
+	int64_t* ids	= calloc(sizeof(int64_t), variables);
+	while (i+1 < argc) {
+		int index			= j++;
+		const char* ts		= argv[++i];
+		int64_t id	= 0;
+		if (isdigit(ts[0])) {
+			id			= atoi(ts);
+		} else {
+			for (int j = 1; j <= variables; j++) {
+				if (query->variable_names[j]) {
+					if (!strcmp(query->variable_names[j]+1, ts)) {
+						id	= -j;
+							fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
+						break;
+					}
+				}
+			}
+			if (id == 0) {
+				id			= -(next_var++);
+					fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
+				triplestore_query_set_variable_name(query, -id, ts);
+// 				bgp.variable_names[-id]		= calloc(1,2+strlen(ts));
+// 				sprintf(bgp.variable_names[-id], "?%s", ts);
+			}
+		}
+		ids[index]	= id;
+	}
+	query->variables	= next_var - 1;
+	
+	for (j = 0; j < triples; j++) {
+		int64_t s	= ids[3*j + 0];
+		int64_t p	= ids[3*j + 1];
+		int64_t o	= ids[3*j + 2];
+		triplestore_bgp_set_triple_nodes(bgp, j, s, p, o);
+	}
+	free(ids);
+
+	triplestore_query_add_op(query, QUERY_BGP, bgp);
+	
+	return query;
 }
 
 int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char** argv) {
@@ -248,54 +277,35 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "edges")) {
 		triplestore_edge_dump(t, ctx->limit, stdout);
 	} else if (!strcmp(op, "bgp")) {
-		bgp_t bgp;
-		bgp.variables	= 0;
-		bgp.triples				= (argc - i) / 3;
-		bgp.nodes				= calloc(sizeof(int64_t), 3 * bgp.triples);
-		bgp.variable_names		= calloc(sizeof(char*), 3*bgp.triples+1);
-		int j	= 0;
-		while (i+1 < argc) {
-			int index			= j++;
-			const char* ts		= argv[++i];
-			int64_t id	= 0;
-			if (isdigit(ts[0])) {
-				id			= atoi(ts);
-			} else {
-				for (int j = 1; j <= bgp.variables; j++) {
-					if (bgp.variable_names[j]) {
-						if (!strcmp(bgp.variable_names[j]+1, ts)) {
-							id	= -j;
-// 							fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
-							break;
-						}
-					}
-				}
-				if (id == 0) {
-					id			= -(++bgp.variables);
-// 					fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
-					bgp.variable_names[-id]		= calloc(1,2+strlen(ts));
-					sprintf(bgp.variable_names[-id], "?%s", ts);
-				}
-			}
-			bgp.nodes[index]	= id;
-		}
-		
+		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
 		if (ctx->verbose) {
 			fprintf(stderr, "------------------------\n");		
-			fprintf(stderr, "Matching BGP:\n");
-			triplestore_print_bgp(t, &bgp, stderr);
-			fprintf(stderr, "------------------------\n");
+			fprintf(stderr, "Matching Query:\n");
+			triplestore_print_query(t, query, stderr);
+			fprintf(stderr, "------------------------\n");		
 		}
-
+		
+		
 		double start	= triplestore_current_time();
-		nodeid_t count	= triplestore_print_bgp_match(t, &bgp, ctx->limit, f);
+		__block int count	= 0;
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			count++;
+			if (f != NULL) {
+				for (int j = 1; j <= query->variables; j++) {
+					nodeid_t id	= final_match[j];
+					fprintf(f, "%s=", query->variable_names[j]);
+					triplestore_print_term(t, id, f, 0);
+					fprintf(f, " ");
+				}
+				fprintf(f, "\n");
+			}
+			return (ctx->limit > 0 && count == ctx->limit);
+		});
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);
 		}
-		
-		free(bgp.nodes);
-		free(bgp.variable_names);
+		triplestore_free_query(query);
 	} else if (!strcmp(op, "triple")) {
 		int64_t s	= atoi(argv[++i]);
 		int64_t p	= atoi(argv[++i]);
@@ -306,6 +316,41 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" triples\n", elapsed, count);
 		}
+	} else if (!strcmp(op, "test")) {
+		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
+		
+		int64_t var	= -2;
+		query_filter_t* filter	= triplestore_new_filter(FILTER_ISIRI, var);
+		triplestore_query_add_op(query, QUERY_FILTER, filter);
+		
+		if (ctx->verbose) {
+			fprintf(stderr, "------------------------\n");		
+			fprintf(stderr, "Matching Query:\n");
+			triplestore_print_query(t, query, stderr);
+			fprintf(stderr, "------------------------\n");		
+		}
+		
+		
+		double start	= triplestore_current_time();
+		__block int count	= 0;
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			count++;
+			if (f != NULL) {
+				for (int j = 1; j <= query->variables; j++) {
+					nodeid_t id	= final_match[j];
+					fprintf(f, "%s=", query->variable_names[j]);
+					triplestore_print_term(t, id, f, 0);
+					fprintf(f, " ");
+				}
+				fprintf(f, "\n");
+			}
+			return (ctx->limit > 0 && count == ctx->limit);
+		});
+		if (ctx->verbose) {
+			double elapsed	= triplestore_elapsed_time(start);
+			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);
+		}
+		triplestore_free_query(query);
 	} else {
 		fprintf(stderr, "Unrecognized operation '%s'\n", op);
 		return 1;
