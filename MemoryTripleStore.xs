@@ -307,7 +307,6 @@ triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV
 		for (i = 1; i <= variables; i++) {
 			svp	= av_fetch(names, i, 0);
 			ptr = SvPV_nolen(*svp);
-			triplestore_bgp_set_variable_name(bgp, i, ptr);
 			triplestore_query_set_variable_name(query, i, ptr);
 		}
 		for (i = 0; i < triples; i++) {
