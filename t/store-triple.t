@@ -24,10 +24,7 @@ sub create_store {
 	return $store;
 }
 
-with 'Test::Attean::TripleStore';
-
-
-test 'match_bgp' => sub {
+sub _store_with_data {
 	my $self	= shift;
 	my @triples;
 	{
@@ -39,6 +36,40 @@ test 'match_bgp' => sub {
 		}
 	}
 	my $store	= $self->create_store(triples => \@triples);
+	return $store;
+}
+
+with 'Test::Attean::TripleStore';
+
+test 'store-planning for BGP filter' => sub {
+	my $self	= shift;
+	my $store	= $self->_store_with_data();
+	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
+	my $planner	= Attean::IDPQueryPlanner->new();
+
+	my $pat		= '1';
+	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://example.org/p'), variable('o'));
+	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
+	my $var		= Attean::ValueExpression->new(value => variable('o'));
+	my $pattern	= Attean::ValueExpression->new(value => literal($pat));
+	my $expr	= Attean::FunctionExpression->new( children => [$var, $pattern], operator => 'regex' );
+	my $filter	= Attean::Algebra::Filter->new(children => [$bgp], expression => $expr);
+	my $plan	= $planner->plan_for_algebra($filter, $model, [$graph]);
+	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::RegexBGPPlan');
+	
+	my $iter	= $plan->evaluate();
+	my $count	= 0;
+	while (my $r = $iter->next) {
+		$count++;
+		like($r->value('o')->value, qr/$pat/);
+	}
+	is($count, 2);
+};
+
+test 'match_bgp' => sub {
+	my $self	= shift;
+	my $store	= $self->_store_with_data();
 
 	{
 		note('1-triple BGP');

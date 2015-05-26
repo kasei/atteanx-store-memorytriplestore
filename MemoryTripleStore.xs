@@ -293,7 +293,7 @@ triplestore_DESTROY (triplestore_t *store)
 	  free_triplestore(store);
 
 void
-triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, SV* closure)
+triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, int re_var, char* pattern, char* flags, SV* closure)
 	INIT:
 		int i;
 		SV** svp;
@@ -320,6 +320,14 @@ triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV
 			triplestore_bgp_set_triple_nodes(bgp, i, s, p, o);
 		}
 		triplestore_query_add_op(query, QUERY_BGP, bgp);
+		
+		if (re_var < 0) {
+			// fprintf(stderr, "Adding REGEX filter: %s =~ /%s/%s\n", query->variable_names[-re_var], pattern, flags);
+			query_filter_t* filter	= triplestore_new_filter(FILTER_REGEX, re_var, pattern, flags);
+			triplestore_query_add_op(query, QUERY_FILTER, filter);
+		}
+		
+		// triplestore_print_query(t, query, stderr);
 		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
 			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
 			return 0;

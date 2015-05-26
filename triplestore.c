@@ -293,7 +293,7 @@ int triplestore_free_filter(query_filter_t* filter) {
 	return 0;
 }
 
-int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* filter, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
 	int64_t node1;
 	int64_t node2;
 	int rc;
@@ -349,7 +349,7 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, nodeid_t
 			return 0;
 		case FILTER_REGEX:
 			term	= t->graph[ current_match[-(filter->node1)] ]._term;
-// 			fprintf(stderr, "matching %s =~ %s (%p)\n", term->value, filter->string2, filter->re);
+			// fprintf(stderr, "matching (?%s) %s =~ %s (%p)\n", query->variable_names[-(filter->node1)], term->value, filter->string2, filter->re);
 			rc		= pcre_exec(
 				filter->re,					/* the compiled pattern */
 				NULL,						/* no extra data - we didn't study the pattern */
@@ -556,7 +556,7 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_FILTER:
-				return _triplestore_filter_match(t, op->ptr, current_match, ^(nodeid_t* final_match){
+				return _triplestore_filter_match(t, query, op->ptr, current_match, ^(nodeid_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			default:
@@ -920,6 +920,7 @@ void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op
 }
 
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f) {
+	fprintf(f, "--- QUERY ---\n");
 	fprintf(f, "- Variables: %d\n", query->variables);
 	for (int v = 1; v <= query->variables; v++) {
 		fprintf(f, "  - %s\n", query->variable_names[v]);
@@ -930,6 +931,7 @@ void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f) {
 		triplestore_print_query_op(t, query, op, f);
 		op	= op->next;
 	}
+	fprintf(f, "----------\n");
 }
 
 
