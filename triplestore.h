@@ -1,3 +1,4 @@
+#include <pcre.h>
 #include <raptor2.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -92,6 +93,7 @@ typedef struct query_filter_s {
 	int64_t node2;	// var or constant term
 	char* string2;	// REGEX pattern, LANGMATCHES language string, CONTAINS, STRENDS, STRSTARTS pattern string
 	char* string3; 	// REGEX flags
+	pcre* re;		// compile pcre object
 } query_filter_t;
 
 typedef struct triplestore_s {

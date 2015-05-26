@@ -322,8 +322,16 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		const char* pat	= argv[++i];
 		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
 		
-		filter_type_t type		= strcmp(op, "starts") ? FILTER_STRENDS : FILTER_STRSTARTS;
-		query_filter_t* filter	= triplestore_new_filter(type, var, pat);
+		query_filter_t* filter;
+		if (!strcmp(op, "starts")) {
+			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
+		} else if (!strcmp(op, "ends")) {
+			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
+		} else if (!strncmp(op, "re", 2)) {
+			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, "i");
+		} else {
+			return 1;
+		}
 		triplestore_query_add_op(query, QUERY_FILTER, filter);
 		
 		

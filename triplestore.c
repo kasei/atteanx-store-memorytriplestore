@@ -1,7 +1,3 @@
-// TODO: change encoding of typed literals to use t.value_id slot with node id instead of t.value_type slot with IRI string.
-
-
-
 #include <fcntl.h>
 #include <time.h>
 #include <assert.h>
@@ -237,8 +233,38 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 	} else if (type == FILTER_SAMETERM) {
 		filter->node1		= va_arg(ap, int64_t);
 		filter->node2		= va_arg(ap, int64_t);
-	
-// 	FILTER_REGEX,		// REGEX(?var, "string", "flags")
+	} else if (type == FILTER_REGEX) {
+		int64_t id		= va_arg(ap, int64_t);
+		const char* pat	= va_arg(ap, char*);
+		const char* fl	= va_arg(ap, char*);
+		filter->node1	= id;
+		filter->string2	= calloc(1, 1+strlen(pat));
+		filter->string3	= calloc(1, 1+strlen(fl));
+		strcpy(filter->string2, pat);
+		strcpy(filter->string3, fl);
+
+		const char *error;
+		int erroffset;
+		int flags		= 0;
+		if (strstr(fl, "i")) {
+			flags		|= PCRE_CASELESS;
+		}
+		filter->re = pcre_compile(
+			pat,			/* the pattern */
+			flags,			/* default options */
+			&error,			/* for error message */
+			&erroffset,		/* for error offset */
+			NULL			/* use default character tables */
+		);
+		if (filter->re == NULL) {
+			printf("PCRE compilation failed at offset %d: %s\n", erroffset, error);
+			free(filter->string2);
+			free(filter->string3);
+			free(filter);
+			return NULL;
+		}
+		
+		
 // 	FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")
 // 	FILTER_CONTAINS,	// CONTAINS(?var, "string")
 	
@@ -260,6 +286,9 @@ int triplestore_free_filter(query_filter_t* filter) {
 	if (filter->string3) {
 		free(filter->string3);
 	}
+	if (filter->re) {
+		pcre_free(filter->re);
+	}
 	free(filter);
 	return 0;
 }
@@ -267,7 +296,10 @@ int triplestore_free_filter(query_filter_t* filter) {
 int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
 	int64_t node1;
 	int64_t node2;
+	int rc;
 	rdf_term_t* term;
+	int OVECCOUNT	= 30;
+	int ovector[OVECCOUNT];
 	switch (filter->type) {
 		case FILTER_ISIRI:
 			if (t->graph[ current_match[-(filter->node1)] ]._term->type != TERM_IRI) {
@@ -315,6 +347,23 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, nodeid_t
 				}
 			}
 			return 0;
+		case FILTER_REGEX:
+			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+// 			fprintf(stderr, "matching %s =~ %s (%p)\n", term->value, filter->string2, filter->re);
+			rc		= pcre_exec(
+				filter->re,					/* the compiled pattern */
+				NULL,						/* no extra data - we didn't study the pattern */
+				term->value,				/* the subject string */
+				strlen(term->value),		/* the length of the subject */
+				0,							/* start at offset 0 in the subject */
+				0,							/* default options */
+				ovector,					/* output vector for substring information */
+				OVECCOUNT					/* number of elements in the output vector */
+			);
+			if (rc <= 0) {
+				return 0;
+			}
+			break;
 		default:
 			fprintf(stderr, "*** Unrecognized filter type %d\n", filter->type);
 	}
@@ -828,6 +877,11 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 			fprintf(f, "STRENDS(");
 			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
 			fprintf(f, ", \"%s\")\n", filter->string2);
+			break;
+		case FILTER_REGEX:
+			fprintf(f, "REGEX(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ", \"%s\", \"%s\")\n", filter->string2, filter->string3);
 			break;
 		default:
 			fprintf(f, "***UNRECOGNIZED FILTER***\n");
