@@ -2,10 +2,12 @@ use ExtUtils::MakeMaker;
 use ExtUtils::Depends;
 use ExtUtils::PkgConfig;
 
-my %raptor = ExtUtils::PkgConfig->find('raptor2');
+my %raptor	= ExtUtils::PkgConfig->find('raptor2');
+my %pcre	= ExtUtils::PkgConfig->find('libpcre');
 my $deps = ExtUtils::Depends->new('AtteanX::Store::MemoryTripleStore', 'XS::Object::Magic');
-$deps->set_inc($raptor{cflags});
-$deps->set_libs($raptor{libs});
+
+$deps->set_inc($raptor{cflags}, $pcre{cflags});
+$deps->set_libs($raptor{libs}, $pcre{libs});
 
 my $inc_files = join(' ', glob '*.h');
 my $src_files = join(' ', glob '*.c');
