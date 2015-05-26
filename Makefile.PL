@@ -4,10 +4,10 @@ use ExtUtils::PkgConfig;
 
 my %raptor	= ExtUtils::PkgConfig->find('raptor2');
 my %pcre	= ExtUtils::PkgConfig->find('libpcre');
-my $deps = ExtUtils::Depends->new('AtteanX::Store::MemoryTripleStore', 'XS::Object::Magic');
+my $deps 	= ExtUtils::Depends->new('AtteanX::Store::MemoryTripleStore', 'XS::Object::Magic');
 
 $deps->set_inc($raptor{cflags}, $pcre{cflags});
-$deps->set_libs($raptor{libs}, $pcre{libs});
+$deps->set_libs(join(' ', $raptor{libs}, $pcre{libs}, '-lBlocksRuntime'));
 
 my $inc_files = join(' ', glob '*.h');
 my $src_files = join(' ', glob '*.c');
@@ -42,10 +42,8 @@ $WriteMakefileArgs{depend}{'triplestore.c'} = "triplestore.h avl.h avl.c";
 $WriteMakefileArgs{depend}{'avl.c'} = "avl.h";
 
 my @CCFLAGS	= ('-g', '-fblocks');
-my @LIBS	= '-lBlocksRuntime';
 
 $WriteMakefileArgs{CCFLAGS}	.= join(' ', '', @CCFLAGS);
-$WriteMakefileArgs{LIBS}	.= join(' ', '', @LIBS);
 
 WriteMakefile(
 	%WriteMakefileArgs,
