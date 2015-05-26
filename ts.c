@@ -317,11 +317,19 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" triples\n", elapsed, count);
 		}
 	} else if (!strcmp(op, "test")) {
+		const char* op	= argv[++i];
+		int64_t var		= atoi(argv[++i]);
+		const char* pat	= argv[++i];
 		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
 		
-		int64_t var	= -2;
-		query_filter_t* filter	= triplestore_new_filter(FILTER_ISIRI, var);
+		filter_type_t type		= strcmp(op, "starts") ? FILTER_STRENDS : FILTER_STRSTARTS;
+		query_filter_t* filter	= triplestore_new_filter(type, var, pat);
 		triplestore_query_add_op(query, QUERY_FILTER, filter);
+		
+		
+// 		int64_t var	= -2;
+// 		query_filter_t* filter	= triplestore_new_filter(FILTER_ISIRI, var);
+// 		triplestore_query_add_op(query, QUERY_FILTER, filter);
 		
 		if (ctx->verbose) {
 			fprintf(stderr, "------------------------\n");		

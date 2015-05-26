@@ -237,6 +237,16 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 	} else if (type == FILTER_SAMETERM) {
 		filter->node1		= va_arg(ap, int64_t);
 		filter->node2		= va_arg(ap, int64_t);
+	
+// 	FILTER_REGEX,		// REGEX(?var, "string", "flags")
+// 	FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")
+// 	FILTER_CONTAINS,	// CONTAINS(?var, "string")
+	
+	} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS) {
+		filter->node1		= va_arg(ap, int64_t);
+		const char* pat		= va_arg(ap, char*);
+		filter->string2		= calloc(1, 1+strlen(pat));
+		strcpy(filter->string2, pat);
 	} else {
 		fprintf(stderr, "*** Unexpected filter type %d\n", type);
 	}
@@ -287,6 +297,24 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, nodeid_t
 			if (node1 != node2) {
 				return 0;
 			}
+			break;
+		case FILTER_STRSTARTS:
+			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+			if (strlen(term->value) >= strlen(filter->string2)) {
+				if (0 == strncmp(term->value, filter->string2, strlen(filter->string2))) {
+					break;
+				}
+			}
+			return 0;
+		case FILTER_STRENDS:
+			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+			if (strlen(term->value) >= strlen(filter->string2)) {
+				const char* suffix	= term->value + strlen(term->value) - strlen(filter->string2);
+				if (0 == strcmp(suffix, filter->string2)) {
+					break;
+				}
+			}
+			return 0;
 		default:
 			fprintf(stderr, "*** Unrecognized filter type %d\n", filter->type);
 	}
@@ -790,6 +818,16 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 			fprintf(f, ", ");
 			_print_term_or_variable(t, query->variables, query->variable_names, filter->node2, f);
 			fprintf(f, ")\n");
+			break;
+		case FILTER_STRSTARTS:
+			fprintf(f, "STRSTARTS(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ", \"%s\")\n", filter->string2);
+			break;
+		case FILTER_STRENDS:
+			fprintf(f, "STRENDS(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ", \"%s\")\n", filter->string2);
 			break;
 		default:
 			fprintf(f, "***UNRECOGNIZED FILTER***\n");
