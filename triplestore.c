@@ -507,12 +507,6 @@ void __indent(FILE* f, int depth) {
 }
 
 int _triplestore_path_step(triplestore_t* t, path_t* path, int64_t s, char* seen, int depth, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
-	if (s > 0) {
-		if (seen[s]) {
-			return 0;
-		}
-		seen[s]++;
-	}
 // 	__indent(stderr, depth);
 // 	fprintf(stderr, "matching path %"PRId64" (%"PRIu32") %"PRId64"\n", s, path->pred, path->end);
 	int64_t sv	= -s;
@@ -528,9 +522,14 @@ int _triplestore_path_step(triplestore_t* t, path_t* path, int64_t s, char* seen
 			reset_s	= 1;
 		}
 	}
+
 // 	__indent(stderr, depth);
 // 	fprintf(stderr, "matching triple %"PRId64" %"PRIu32" 0\n", s, path->pred);
 	int r	= triplestore_match_triple(t, s, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+		if (seen[_o]) {
+			return 0;
+		}
+		
 // 		__indent(stderr, depth);
 // 		fprintf(stderr, "got triple --> %"PRIu32" %"PRIu32" %"PRIu32"\n", _s, _p, _o);
 
@@ -560,9 +559,18 @@ int _triplestore_path_step(triplestore_t* t, path_t* path, int64_t s, char* seen
 // 			fprintf(stderr, "resetting %"PRId64"\n", path->end);
 			current_match[-(path->end)]	= 0;
 		}
-		return _triplestore_path_step(t, path, _o, seen, 1+depth, current_match, block);
+		
+		int r	= 0;
+		seen[_o]++;
+		r	= _triplestore_path_step(t, path, _o, seen, 1+depth, current_match, block);
+		seen[_o]--;
+		return r;
 	});
 	
+// 	if (s > 0) {
+// 		seen[s]--;
+// 	}
+
 	if (reset_s) {
 // 		__indent(stderr, depth);
 // 		fprintf(stderr, "resetting %"PRId64"\n", sv);
@@ -578,7 +586,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 	
 	int r	= 0;
 	if (path->type == PATH_STAR || path->type == PATH_PLUS) {
-		char* seen	= calloc(t->nodes_used, 1);
+		char* seen	= calloc(1, t->nodes_used);
 		r			= _triplestore_path_step(t, path, path->start, seen, 0, current_match, block);
 		free(seen);
 	}
@@ -910,7 +918,7 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 			idx			= t->edges[idx].next_in;
 		}
 	} else {
-		for (nodeid_t s = 1; s < t->nodes_used; s++) {
+		for (nodeid_t s = 1; s <= t->nodes_used; s++) {
 			if (_s <= 0 || _s == s) {
 				nodeid_t idx	= t->graph[s].out_edge_head;
 				while (idx != 0) {
