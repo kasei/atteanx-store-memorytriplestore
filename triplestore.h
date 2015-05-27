@@ -23,6 +23,11 @@ typedef enum {
 } query_type_t;
 
 typedef enum {
+	PATH_PLUS,
+	PATH_STAR,
+} path_type_t;
+
+typedef enum {
 	FILTER_ISIRI = 1,	// ISIRI(?var)
 	FILTER_ISLITERAL,	// ISLITERAL(?var)
 	FILTER_ISBLANK,		// ISBLANK(?var)
@@ -81,11 +86,14 @@ typedef struct query_s {
 typedef struct bgp_s {
 	int triples;
 	int64_t* nodes;
-	
-	// TODO: remove these, as they will be contained in the enclosing query_t:
-// 	int variables;
-// 	char** variable_names;
 } bgp_t;
+
+typedef struct path_s {
+	path_type_t type;
+	int64_t start;
+	int64_t end;
+	nodeid_t pred;
+} path_t;
 
 typedef struct query_filter_s {
 	filter_type_t type;
@@ -143,8 +151,14 @@ bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples);
 int triplestore_free_bgp(bgp_t* bgp);
 int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t p, int64_t o);
 
+// Paths
+path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end);
+int triplestore_free_path(path_t* path);
+int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(nodeid_t* final_match));
 
 
 query_filter_t* triplestore_new_filter(filter_type_t type, ...);
 int triplestore_free_filter(query_filter_t* filter);
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
+
+

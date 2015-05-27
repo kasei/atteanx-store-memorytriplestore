@@ -114,7 +114,7 @@ int triplestore_print_ntriples(triplestore_t* t, FILE* f) {
 
 int triplestore_node_dump(triplestore_t* t, int64_t limit, FILE* f) {
 	fprintf(f, "# %"PRIu32" nodes\n", t->nodes_used);
-	for (nodeid_t s = 1; s < t->nodes_used; s++) {
+	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
 		char* ss		= triplestore_term_to_string(t, t->graph[s]._term);
 		fprintf(f, "N %07"PRIu32" %s (%"PRIu32", %"PRIu32")\n", s, ss, t->graph[s].in_degree, t->graph[s].out_degree);
 		free(ss);
@@ -126,7 +126,7 @@ int triplestore_node_dump(triplestore_t* t, int64_t limit, FILE* f) {
 int triplestore_edge_dump(triplestore_t* t, int64_t limit, FILE* f) {
 	fprintf(f, "# %"PRIu32" edges\n", t->edges_used);
 	int64_t count	= 0;
-	for (nodeid_t s = 1; s < t->nodes_used; s++) {
+	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
 		nodeid_t idx	= t->graph[s].out_edge_head;
 		while (idx != 0) {
 			nodeid_t p	= t->edges[idx].p;
@@ -134,9 +134,10 @@ int triplestore_edge_dump(triplestore_t* t, int64_t limit, FILE* f) {
 			fprintf(f, "E %07"PRIu32" %07"PRIu32" %07"PRIu32"\n", s, p, o);
 			idx			= t->edges[idx].next_out;
 			count++;
-			if (limit > 0 && count == limit) break;
+			if (limit > 0 && count == limit) goto edge_break;
 		}
 	}
+edge_break:
 	return 0;
 }
 
@@ -312,6 +313,60 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		int64_t o	= atoi(argv[++i]);
 		double start	= triplestore_current_time();
 		nodeid_t count	= triplestore_print_match(t, s, p, o, f);
+		if (ctx->verbose) {
+			double elapsed	= triplestore_elapsed_time(start);
+			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" triples\n", elapsed, count);
+		}
+	} else if (!strcmp(op, "path")) {
+		int64_t var	= -1;
+		const char* ss	= argv[++i];
+// 		int64_t s	= atoi(argv[++i]);
+		int64_t p	= atoi(argv[++i]);
+		const char* os	= argv[++i];
+// 		int64_t o	= atoi(argv[++i]);
+
+		query_t* query	= triplestore_new_query(t, 3);
+		
+		int64_t s, o;
+		if (isdigit(ss[0])) {
+			s	= atoi(ss);
+		} else {
+			s	= var--;
+			triplestore_query_set_variable_name(query, -s, ss);
+		}
+
+		if (isdigit(os[0])) {
+			o	= atoi(os);
+		} else {
+			o	= var--;
+			triplestore_query_set_variable_name(query, -o, os);
+		}
+
+		double start	= triplestore_current_time();
+		
+		path_t* path	= triplestore_new_path(t, PATH_PLUS, s, (nodeid_t) p, o);
+
+
+		__block int count	= 0;
+		triplestore_path_match(t, path, 2, ^(nodeid_t* final_match) {
+			count++;
+			if (f != NULL) {
+				for (int j = 1; j <= query->variables; j++) {
+					nodeid_t id	= final_match[j];
+					if (id > 0) {
+						fprintf(f, "%s=", query->variable_names[j]);
+						triplestore_print_term(t, id, f, 0);
+						fprintf(f, " ");
+					}
+				}
+				fprintf(f, "\n");
+			}
+			return (ctx->limit > 0 && count == ctx->limit);
+		});
+
+		triplestore_free_query(query);
+		triplestore_free_path(path);
+		
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" triples\n", elapsed, count);
