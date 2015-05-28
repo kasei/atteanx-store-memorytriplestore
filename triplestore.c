@@ -354,11 +354,14 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 	uint32_t edges	= ntohl(*((uint32_t*) &(buffer[8])));
 // 	uint32_t nalloc	= ntohl(*((uint32_t*) &(buffer[12])));
 	uint32_t nodes	= ntohl(*((uint32_t*) &(buffer[16])));
-	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", edges, nodes);
-	
-	t->graph		= calloc(sizeof(graph_node_t), 1+nodes);
+
 	t->nodes_alloc	= nodes;
 	t->nodes_used	= nodes;
+	t->edges_alloc	= edges;
+	t->edges_used	= edges;
+	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
+	
+	t->graph		= calloc(sizeof(graph_node_t), 1+nodes);
 	hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
 	for (uint32_t i = 1; i <= nodes; i++) {
 		_triplestore_load_node(fd, i, &(t->graph[i]));
@@ -369,8 +372,6 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 	}
 
 	t->edges		= calloc(sizeof(index_list_element_t), 1+edges);
-	t->edges_alloc	= edges;
-	t->edges_used	= edges;
 	read(fd, &(t->edges[1]), 20 * edges);
 	for (uint32_t i = 1; i <= edges; i++) {
 // 		_triplestore_load_edge(fd, i, &(t->edges[i]));
@@ -381,9 +382,6 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 		t->edges[i].next_out	= ntohl(t->edges[i].next_out);
 	}
 
-	t->nodes_used	= nodes;
-	t->edges_used	= edges;
-	
 	return 0;
 }
 
@@ -1112,6 +1110,13 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 #pragma mark Print Functions
 
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
+	if (s > t->nodes_used) {
+		fprintf(f, "(undefined)");
+		if (newline) {
+			fprintf(f, "\n");
+		}
+		return 1;
+	}
 	rdf_term_t* subject		= t->graph[s]._term;
 	if (subject == NULL) assert(0);
 	char* ss		= triplestore_term_to_string(t, subject);
