@@ -67,7 +67,6 @@ typedef struct graph_node_s {
 	
 	uint32_t out_edge_head;
 	uint32_t in_edge_head;
-	
 } graph_node_t;
 
 typedef struct query_op_s {
@@ -131,6 +130,12 @@ int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o,
 nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm);
 nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm);
 
+
+int triplestore_dump(triplestore_t* t, const char* filename);
+int triplestore_load(triplestore_t* t, const char* filename);
+
+
+
 int triplestore__load_file(triplestore_t* t, const char* filename, int print, int verbose);
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o));
@@ -160,5 +165,8 @@ int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^b
 query_filter_t* triplestore_new_filter(filter_type_t type, ...);
 int triplestore_free_filter(query_filter_t* filter);
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
+
+
+
 
 

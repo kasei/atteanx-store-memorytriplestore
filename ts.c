@@ -99,16 +99,20 @@ int triplestore_print_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t 
 	return 0;
 }
 
-int triplestore_print_ntriples(triplestore_t* t, FILE* f) {
-	for (nodeid_t s = 1; s < t->nodes_used; s++) {
+int triplestore_print_ntriples(triplestore_t* t, FILE* f, int64_t limit) {
+	uint32_t count	= 0;
+	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
 		nodeid_t idx	= t->graph[s].out_edge_head;
 		while (idx != 0) {
 			nodeid_t p	= t->edges[idx].p;
 			nodeid_t o	= t->edges[idx].o;
 			triplestore_print_triple(t, s, p, o, f);
 			idx			= t->edges[idx].next_out;
+			count++;
+			if (limit > 0 && count == limit) goto ntriples_break;
 		}
 	}
+ntriples_break:
 	return 0;
 }
 
@@ -141,7 +145,7 @@ edge_break:
 	return 0;
 }
 
-int triplestore_dump(triplestore_t* t, FILE* f) {
+int triplestore_print_data(triplestore_t* t, FILE* f) {
 	triplestore_node_dump(t, -1, f);
 	triplestore_edge_dump(t, -1, f);
 	return 0;
@@ -169,7 +173,7 @@ void help(FILE* f) {
 	fprintf(f, "  (un)set limit LIMIT\n");
 	fprintf(f, "  match PATTERN\n");
 	fprintf(f, "  ntriples\n");
-	fprintf(f, "  dump\n");
+	fprintf(f, "  data\n");
 	fprintf(f, "  nodes\n");
 	fprintf(f, "  edges\n");
 	fprintf(f, "  bgp S1 P1 O1 S2 P2 O2 ...\n");
@@ -239,7 +243,8 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	int i	= 0;
 	FILE* f	= ctx->print ? stdout : NULL;
 	const char* op			= argv[i];
-	if (!strcmp(op, "help")) {
+	if (!strcmp(op, "")) {
+	} else if (!strcmp(op, "help")) {
 		help(f);
 	} else if (!strcmp(op, "set")) {
 		const char* field	= argv[++i];
@@ -270,9 +275,49 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			return 0;
 		});
 	} else if (!strcmp(op, "ntriples")) {
-		triplestore_print_ntriples(t, stdout);
+		triplestore_print_ntriples(t, stdout, ctx->limit);
+	} else if (!strcmp(op, "load")) {
+		const char* filename	= argv[++i];
+		double start	= triplestore_current_time();
+		triplestore_load(t, filename);
+		uint32_t count	= triplestore_size(t);
+		if (ctx->verbose) {
+			double elapsed	= triplestore_elapsed_time(start);
+			fprintf(stderr, "loaded %"PRIu32" triples in %lfs (%5.1f triples/second)\n", count, elapsed, ((double)count/elapsed));
+		}
 	} else if (!strcmp(op, "dump")) {
-		triplestore_dump(t, stdout);
+		const char* filename	= argv[++i];
+		double start	= triplestore_current_time();
+		triplestore_dump(t, filename);
+		uint32_t count	= triplestore_size(t);
+		if (ctx->verbose) {
+			double elapsed	= triplestore_elapsed_time(start);
+			fprintf(stderr, "dumped %"PRIu32" triples in %lfs (%5.1f triples/second)\n", count, elapsed, ((double)count/elapsed));
+		}
+	} else if (!strcmp(op, "import")) {
+		const char* filename	= argv[++i];
+		if (triplestore__load_file(t, filename, ctx->print, ctx->verbose)) {
+			fprintf(stderr, "Failed to import file %s\n", filename);
+		}
+	} else if (!strcmp(op, "debug")) {
+		fprintf(stdout, "Triplestore:\n");
+		fprintf(stdout, "- Nodes: %"PRIu32"\n", t->nodes_used);
+		for (uint32_t i = 1; i <= t->nodes_used; i++) {
+			char* s	= triplestore_term_to_string(t, t->graph[i]._term);
+			fprintf(stdout, "       %4d: %s (out head: %"PRIu32"; in head: %"PRIu32")\n", i, s, t->graph[i].out_edge_head, t->graph[i].in_edge_head);
+			free(s);
+			nodeid_t idx	= t->graph[i].out_edge_head;
+			while (idx != 0) {
+				nodeid_t s	= t->edges[idx].p;
+				nodeid_t p	= t->edges[idx].p;
+				nodeid_t o	= t->edges[idx].o;
+				fprintf(stdout, "       -> %"PRIu32" %"PRIu32" %"PRIu32"\n", s, p, o);
+				idx			= t->edges[idx].next_out;
+			}
+		}
+		fprintf(stdout, "- Edges: %"PRIu32"\n", t->edges_used);
+	} else if (!strcmp(op, "data")) {
+		triplestore_print_data(t, stdout);
 	} else if (!strcmp(op, "nodes")) {
 		triplestore_node_dump(t, ctx->limit, stdout);
 	} else if (!strcmp(op, "edges")) {
@@ -448,7 +493,6 @@ int main (int argc, char** argv) {
 	char* linenoiseHistoryFile	= ".triplestore-history";
 	linenoiseHistoryLoad(linenoiseHistoryFile);
 
-	
 	int interactive		= 0;
 	int max_edges		= 268435456; // 2^28
 	int max_nodes		= 268435456; // 2^28
@@ -475,14 +519,16 @@ int main (int argc, char** argv) {
 		}
 	}
 
-	const char* filename	= argv[i++];
-	if (ctx.verbose) {
-		fprintf(stderr, "Importing %s\n", filename);
-	}
+	if (i < argc) {
+		const char* filename	= argv[i++];
+		if (ctx.verbose) {
+			fprintf(stderr, "Importing %s\n", filename);
+		}
 	
-	triplestore__load_file(t, filename, ctx.print, ctx.verbose);
-	if (ctx.error) {
-		return 1;
+		triplestore__load_file(t, filename, ctx.print, ctx.verbose);
+		if (ctx.error) {
+			return 1;
+		}
 	}
 
 	triplestore_op(t, &ctx, argc-i, &(argv[i]));
