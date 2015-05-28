@@ -198,16 +198,16 @@ query_t* construct_bgp_query(triplestore_t* t, struct runtime_ctx_s* ctx, int ar
 		} else {
 			for (int j = 1; j <= variables; j++) {
 				if (query->variable_names[j]) {
-					if (!strcmp(query->variable_names[j]+1, ts)) {
+					if (!strcmp(query->variable_names[j], ts)) {
 						id	= -j;
-							fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
+						fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
 						break;
 					}
 				}
 			}
 			if (id == 0) {
 				id			= -(next_var++);
-					fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
+				fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
 				triplestore_query_set_variable_name(query, -id, ts);
 // 				bgp.variable_names[-id]		= calloc(1,2+strlen(ts));
 // 				sprintf(bgp.variable_names[-id], "?%s", ts);
