@@ -62,11 +62,17 @@ package AtteanX::Store::MemoryTripleStore {
 		if ($self->build_struct()) {
 			die "Failed to construct triplestore object";
 		}
-		if (my $filename = $args->{'filename'}) {
-			if (-r $filename) {
-				$self->load_file($filename);
+		if (my $rdf = $args->{'filename'}) {
+			if (-r $rdf) {
+				$self->load_file($rdf);
 			} else {
-				warn "*** Cannot read from $filename";
+				warn "*** Cannot read from RDF $rdf";
+			}
+		} elsif (my $db = $args->{'database'}) {
+			if (-r $db) {
+				$self->load($db);
+			} else {
+				warn "*** Cannot read from database $db";
 			}
 		}
 	}
