@@ -100,31 +100,33 @@ call_handler_cb (pTHX_ SV *closure, UV n_args, ...)
 }
 
 static SV*
-rdf_term_to_object(rdf_term_t* t) {
+rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 	SV* object;
 	SV* class;
 	SV* string;
+	char* dtvalue;
 	SV* dt;
+	SV* lang;
 	SV* value;
 	SV* value_key;
 	SV* lang_key;
 	SV* dt_key;
-	switch (t->type) {
+	switch (term->type) {
 		case TERM_IRI:
 			class	= newSVpvs("AtteanX::Store::MemoryTripleStore::IRI");
 			object	= new_node_instance(aTHX_ class, 0);
 			SvREFCNT_dec(class);
-			xs_object_magic_attach_struct(aTHX_ SvRV(object), t);
+			xs_object_magic_attach_struct(aTHX_ SvRV(object), term);
 			return object;
 		case TERM_BLANK:
 			class	= newSVpvs("AtteanX::Store::MemoryTripleStore::Blank");
 			object	= new_node_instance(aTHX_ class, 0);
 			SvREFCNT_dec(class);
-			xs_object_magic_attach_struct(aTHX_ SvRV(object), t);
+			xs_object_magic_attach_struct(aTHX_ SvRV(object), term);
 			return object;
 		case TERM_XSDSTRING_LITERAL:
 			class		= newSVpvs("Attean::IRI");
-			value		= newSVpv("http://www.w3.org/2001/XMLSchema#string", 0);
+			value		= newSVpvs("http://www.w3.org/2001/XMLSchema#string");
 			dt			= new_node_instance(aTHX_ class, 1, value);
 			SvREFCNT_dec(value);
 			SvREFCNT_dec(class);
@@ -132,7 +134,7 @@ rdf_term_to_object(rdf_term_t* t) {
 			dt_key		= newSVpvs("datatype");
 			value_key	= newSVpvs("value");
 			class	= newSVpvs("Attean::Literal");
-			string	= newSVpv((const char*) t->value, 0);
+			string	= newSVpv((const char*) term->value, 0);
 			object	= new_node_instance(aTHX_ class, 4, value_key, string, dt_key, dt);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(dt);
@@ -143,8 +145,8 @@ rdf_term_to_object(rdf_term_t* t) {
 			lang_key		= newSVpvs("language");
 			value_key	= newSVpvs("value");
 			class	= newSVpvs("Attean::Literal");
-			string	= newSVpv((const char*) t->value, 0);
-			SV* lang	= newSVpv((const char*) t->value_type, 0);
+			string	= newSVpv((const char*) term->value, 0);
+			lang	= newSVpv((const char*) term->value_type, 0);
 			object	= new_node_instance(aTHX_ class, 4, value_key, string, lang_key, lang);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(lang);
@@ -153,35 +155,36 @@ rdf_term_to_object(rdf_term_t* t) {
 			return object;
 		case TERM_TYPED_LITERAL:
 			class		= newSVpvs("Attean::IRI");
-			value		= newSVpv((const char*) t->value_type, 0);
+			dtvalue		= t->graph[ term->value_id ]._term->value;
+			value		= newSVpv(dtvalue, strlen(dtvalue));
 			dt			= new_node_instance(aTHX_ class, 1, value);
 			SvREFCNT_dec(value);
 			SvREFCNT_dec(class);
 
 			dt_key		= newSVpvs("datatype");
 			value_key	= newSVpvs("value");
-			class	= newSVpvs("Attean::Literal");
-			SV* string	= newSVpv((const char*) t->value, 0);
-			object	= new_node_instance(aTHX_ class, 4, value_key, string, dt_key, dt);
+			class		= newSVpvs("Attean::Literal");
+			string		= newSVpv((const char*) term->value, 0);
+			object		= new_node_instance(aTHX_ class, 4, value_key, string, dt_key, dt);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(dt);
 			SvREFCNT_dec(dt_key);
 			SvREFCNT_dec(value_key);
 			return object;
 		default:
-			fprintf(stderr, "*** unknown node type %d during import\n", t->type);
+			fprintf(stderr, "*** unknown node type %d during import\n", term->type);
 			return &PL_sv_undef;
 	}
 }
 
 void
-handle_new_triple_object (SV* closure, rdf_term_t* subject, rdf_term_t* predicate, rdf_term_t* object) {
-	SV* s	= rdf_term_to_object(subject);
-	SV* p	= rdf_term_to_object(predicate);
-	SV* o	= rdf_term_to_object(object);
+handle_new_triple_object (triplestore_t* t, SV* closure, rdf_term_t* subject, rdf_term_t* predicate, rdf_term_t* object) {
+	SV* s	= rdf_term_to_object(t, subject);
+	SV* p	= rdf_term_to_object(t, predicate);
+	SV* o	= rdf_term_to_object(t, object);
 	
 	SV* class	= newSVpvs("Attean::Triple");
-	SV* t	= new_node_instance(aTHX_ class, 3, s, p, o);
+	SV* triple	= new_node_instance(aTHX_ class, 3, s, p, o);
 	SvREFCNT_dec(class);
 	SvREFCNT_dec(s);
 	SvREFCNT_dec(p);
@@ -189,19 +192,19 @@ handle_new_triple_object (SV* closure, rdf_term_t* subject, rdf_term_t* predicat
 	
 // 	fprintf(stderr, "Parsed: %p %p %p\n", triple->subject, triple->predicate, triple->object);
 	call_handler_cb(closure, 1, t);
-	SvREFCNT_dec(t);
+	SvREFCNT_dec(triple);
 	return;
 }
 
 void
 handle_new_result_object (triplestore_t* t, SV* closure, int variables, char** variable_names, nodeid_t* match) {
 	HV*	hash	= newHV();
-	fprintf(stderr, "constructing result from table:\n");
+	// fprintf(stderr, "constructing result from table:\n");
 	for (int j = 1; j <= variables; j++) {
 		nodeid_t id			= match[j];
-		fprintf(stderr, "[%d]: %"PRIu32"\n", j, id);
+		// fprintf(stderr, "[%d]: %"PRIu32"\n", j, id);
 		rdf_term_t* term	= t->graph[id]._term;
-		SV* object			= rdf_term_to_object(term);
+		SV* object			= rdf_term_to_object(t, term);
 		const char* key		= variable_names[j];
 		hv_store(hash, key, strlen(key), object, 0);
 	}
@@ -503,7 +506,7 @@ void
 triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)
 	CODE:
 		triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o){
-			handle_new_triple_object(closure, t->graph[s]._term, t->graph[p]._term, t->graph[o]._term);
+			handle_new_triple_object(t, closure, t->graph[s]._term, t->graph[p]._term, t->graph[o]._term);
 			return 0;
 		});
 
@@ -520,6 +523,38 @@ triplestore__count_triples(triplestore_t* t, IV s, IV p, IV o)
 		RETVAL = count;
 	OUTPUT:
 		RETVAL
+
+
+void
+triplestore_debug(triplestore_t* t)
+	CODE:
+		fprintf(stdout, "Triplestore:\n");
+		fprintf(stdout, "- Nodes: %"PRIu32"\n", t->nodes_used);
+		for (uint32_t i = 1; i <= t->nodes_used; i++) {
+			char* s	= triplestore_term_to_string(t, t->graph[i]._term);
+			fprintf(stdout, "       %4d: %s (out head: %"PRIu32"; in head: %"PRIu32")\n", i, s, t->graph[i].out_edge_head, t->graph[i].in_edge_head);
+			free(s);
+			nodeid_t idx	= t->graph[i].out_edge_head;
+			while (idx != 0) {
+				nodeid_t s	= t->edges[idx].p;
+				nodeid_t p	= t->edges[idx].p;
+				nodeid_t o	= t->edges[idx].o;
+				fprintf(stdout, "       -> %"PRIu32" %"PRIu32" %"PRIu32"\n", s, p, o);
+				idx			= t->edges[idx].next_out;
+			}
+		}
+		fprintf(stdout, "- Edges: %"PRIu32"\n", t->edges_used);
+
+void
+triplestore_debug_match(triplestore_t* t, char* pattern)
+	CODE:
+		fprintf(stderr, "matching graph nodes:\n");
+		for (nodeid_t s = 1; s < t->nodes_used; s++) {
+			char* string		= triplestore_term_to_string(t, t->graph[s]._term);
+			if (strstr(string, pattern)) {
+				fprintf(stderr, "%-7"PRIu32" %s\n", s, string);
+			}
+		}
 
 
 MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::IRI PREFIX = rdf_term_iri_
