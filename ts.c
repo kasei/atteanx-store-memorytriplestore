@@ -427,6 +427,8 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
 		} else if (!strcmp(op, "ends")) {
 			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
+		} else if (!strcmp(op, "contains")) {
+			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat);
 		} else if (!strncmp(op, "re", 2)) {
 			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, "i");
 		} else {
@@ -460,7 +462,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 				}
 				fprintf(f, "\n");
 			}
-			return (ctx->limit > 0 && count == ctx->limit);
+			return (ctx->limit > 0 && count >= ctx->limit);
 		});
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);

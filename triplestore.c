@@ -432,9 +432,7 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		
 		
 // 	FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")
-// 	FILTER_CONTAINS,	// CONTAINS(?var, "string")
-	
-	} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS) {
+	} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS || type == FILTER_CONTAINS) {
 		filter->node1		= va_arg(ap, int64_t);
 		const char* pat		= va_arg(ap, char*);
 		filter->string2		= calloc(1, 1+strlen(pat));
@@ -446,6 +444,9 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 }
 
 int triplestore_free_filter(query_filter_t* filter) {
+	if (filter->string2_lang) {
+		free(filter->string2_lang);
+	}
 	if (filter->string2) {
 		free(filter->string2);
 	}
@@ -496,6 +497,18 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 				return 0;
 			}
 			break;
+		case FILTER_CONTAINS:
+			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+			if (strlen(filter->string2) == 0) {
+				// all strings contain the empty pattern
+				break;
+			}
+			if (strlen(term->value) >= strlen(filter->string2)) {
+				if (strstr(term->value, filter->string2) != NULL) {
+					break;
+				}
+			}
+			return 0;
 		case FILTER_STRSTARTS:
 			term	= t->graph[ current_match[-(filter->node1)] ]._term;
 			if (strlen(term->value) >= strlen(filter->string2)) {
@@ -614,10 +627,6 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 		}
 	}
 	
-	if (o == 0) {
-		fprintf(stderr, "Got unexpected zero node from nodes[%d]\n", offset+2);
-		assert(0);
-	}
 // 	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
 	int r	= triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 // 		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
@@ -699,7 +708,9 @@ int _triplestore_path_step(triplestore_t* t, path_t* path, int64_t s, char* seen
 // 		__indent(stderr, depth);
 // 		fprintf(stderr, "got triple --> %"PRIu32" %"PRIu32" %"PRIu32"\n", _s, _p, _o);
 
+		int reset_s	= 0;
 		if (s < 0) {
+			reset_s	= 1;
 // 			__indent(stderr, depth);
 // 			fprintf(stderr, "-> setting %"PRId64" to %"PRIu32"\n", sv, _s);
 			current_match[sv]	= _s;
@@ -729,13 +740,13 @@ int _triplestore_path_step(triplestore_t* t, path_t* path, int64_t s, char* seen
 		int r	= 0;
 		seen[_o]++;
 		r	= _triplestore_path_step(t, path, _o, seen, 1+depth, current_match, block);
-		seen[_o]--;
+// 		seen[_o]--;
 		return r;
 	});
 	
-// 	if (s > 0) {
-// 		seen[s]--;
-// 	}
+	if (reset_s) {
+		seen[s]--;
+	}
 
 	if (reset_s) {
 // 		__indent(stderr, depth);
@@ -785,6 +796,9 @@ int triplestore_free_query_op(query_op_t* op) {
 	switch (op->type) {
 		case QUERY_BGP:
 			triplestore_free_bgp(op->ptr);
+			break;
+		case QUERY_PATH:
+			triplestore_free_path(op->ptr);
 			break;
 		case QUERY_FILTER:
 			triplestore_free_filter(op->ptr);
@@ -1163,15 +1177,32 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 			_print_term_or_variable(t, query->variables, query->variable_names, filter->node2, f);
 			fprintf(f, ")\n");
 			break;
+		case FILTER_CONTAINS:
+			fprintf(f, "CONTAINS(");
+			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			fprintf(f, ", \"%s\"", filter->string2);
+			if (filter->string2_lang) {
+				fprintf(f, "@%s", filter->string2_lang);
+			}
+			fprintf(f, ")\n");
+			break;
 		case FILTER_STRSTARTS:
 			fprintf(f, "STRSTARTS(");
 			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
-			fprintf(f, ", \"%s\")\n", filter->string2);
+			fprintf(f, ", \"%s\"", filter->string2);
+			if (filter->string2_lang) {
+				fprintf(f, "@%s", filter->string2_lang);
+			}
+			fprintf(f, ")\n");
 			break;
 		case FILTER_STRENDS:
 			fprintf(f, "STRENDS(");
 			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
-			fprintf(f, ", \"%s\")\n", filter->string2);
+			fprintf(f, ", \"%s\"", filter->string2);
+			if (filter->string2_lang) {
+				fprintf(f, "@%s", filter->string2_lang);
+			}
+			fprintf(f, ")\n");
 			break;
 		case FILTER_REGEX:
 			fprintf(f, "REGEX(");

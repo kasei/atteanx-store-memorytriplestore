@@ -99,6 +99,7 @@ typedef struct query_filter_s {
 	int64_t node1;	// var
 	int64_t node2;	// var or constant term
 	char* string2;	// REGEX pattern, LANGMATCHES language string, CONTAINS, STRENDS, STRSTARTS pattern string
+	char* string2_lang;	// optional language tag for string functions used in checking for argument compatibility
 	char* string3; 	// REGEX flags
 	pcre* re;		// compile pcre object
 } query_filter_t;
