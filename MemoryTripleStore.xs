@@ -234,6 +234,8 @@ BOOT:
 	EXPORT_FLAG(FILTER_CONTAINS);
 	EXPORT_FLAG(FILTER_STRSTARTS);
 	EXPORT_FLAG(FILTER_STRENDS);
+	EXPORT_FLAG(PATH_PLUS);
+	EXPORT_FLAG(PATH_STAR);
 }
 
 int
@@ -403,6 +405,39 @@ triplestore_match_bgp_with_filter_cb(triplestore_t* t, IV triples, IV variables,
 		triplestore_free_query(query);
 
 void
+triplestore_match_path_cb(triplestore_t* t, IV path_type, IV variables, AV* ids, AV* names, SV* closure)
+	INIT:
+		int i;
+		SV **svs, **svp, **svo;
+		char* ptr;
+		path_t* path;
+		query_t* query;
+		IV iv;
+	CODE:
+		query = triplestore_new_query(t, variables);
+		for (i = 1; i <= variables; i++) {
+			svp	= av_fetch(names, i, 0);
+			ptr = SvPV_nolen(*svp);
+			triplestore_query_set_variable_name(query, i, ptr);
+		}
+		svs			= av_fetch(ids, 0, 0);
+		svp			= av_fetch(ids, 1, 0);
+		svo			= av_fetch(ids, 2, 0);
+		int64_t s	= (int64_t) SvIV(*svs);
+		int64_t p	= (int64_t) SvIV(*svp);
+		int64_t o	= (int64_t) SvIV(*svo);
+		
+		path		= triplestore_new_path(t, (path_type_t) path_type, s, (nodeid_t) p, o);		
+		triplestore_query_add_op(query, QUERY_PATH, path);
+		
+		// triplestore_print_query(t, query, stderr);
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
+			return 0;
+		});
+		triplestore_free_query(query);
+
+void
 triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, int re_var, char* pattern, char* flags, SV* closure)
 	INIT:
 		int i;
@@ -451,6 +486,20 @@ triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)
 			handle_new_triple_object(closure, t->graph[s]._term, t->graph[p]._term, t->graph[o]._term);
 			return 0;
 		});
+
+int
+triplestore__count_triples(triplestore_t* t, IV s, IV p, IV o)
+	INIT:
+		__block int count;
+	CODE:
+		count = 0;
+		triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o){
+			count++;
+			return 0;
+		});
+		RETVAL = count;
+	OUTPUT:
+		RETVAL
 
 
 MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::IRI PREFIX = rdf_term_iri_
