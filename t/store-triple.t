@@ -41,64 +41,6 @@ sub _store_with_data {
 
 with 'Test::Attean::TripleStore';
 
-test 'store-planning for BGP REGEX filter' => sub {
-	my $self	= shift;
-	my $store	= $self->_store_with_data();
-	my $graph	= iri('http://example.org/');
-	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
-	my $planner	= Attean::IDPQueryPlanner->new();
-
-	my $pat		= '1';
-	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://example.org/p'), variable('o'));
-	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
-	my $var		= Attean::ValueExpression->new(value => variable('o'));
-	my $pattern	= Attean::ValueExpression->new(value => literal($pat));
-	my $expr	= Attean::FunctionExpression->new( children => [$var, $pattern], operator => 'regex' );
-	my $filter	= Attean::Algebra::Filter->new(children => [$bgp], expression => $expr);
-	my $plan	= $planner->plan_for_algebra($filter, $model, [$graph]);
-	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::FilteredBGPPlan');
-	
-	my $iter	= $plan->evaluate();
-	my $count	= 0;
-	while (my $r = $iter->next) {
-		$count++;
-		like($r->value('o')->value, qr/$pat/, 'Result satisfies filters');
-	}
-	is($count, 2, 'Expected result count');
-};
-
-test 'store-planning for BGP type+REGEX filter' => sub {
-	my $self	= shift;
-	my $store	= $self->_store_with_data();
-	my $graph	= iri('http://example.org/');
-	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
-	my $planner	= Attean::IDPQueryPlanner->new();
-
-	my $pat		= '1';
-	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://example.org/p'), variable('o'));
-	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
-	my $var		= Attean::ValueExpression->new(value => variable('o'));
-	my $expr1	= Attean::FunctionExpression->new( children => [$var], operator => 'isiri' );
-	my $filter1	= Attean::Algebra::Filter->new(children => [$bgp], expression => $expr1);
-
-	my $pattern	= Attean::ValueExpression->new(value => literal($pat));
-	my $expr2	= Attean::FunctionExpression->new( children => [$var, $pattern], operator => 'regex' );
-	my $filter2	= Attean::Algebra::Filter->new(children => [$filter1], expression => $expr2);
-	my $plan	= $planner->plan_for_algebra($filter2, $model, [$graph]);
-	
-	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::FilteredBGPPlan');
-	is($plan->filter_count, 2, 'Store-provided plan represents both filters');
-	
-	my $iter	= $plan->evaluate();
-	my $count	= 0;
-	while (my $r = $iter->next) {
-		$count++;
-		# The filters in this query shouldn't produce any results (the combination of the ISIRI type check and the /1/ REGEX does not match any data)
-		fail("Unexpected result shoudn't satisfy filter: " . $r->as_string);
-	}
-	is($count, 0, 'Expected result count');
-};
-
 test 'match_bgp' => sub {
 	my $self	= shift;
 	my $store	= $self->_store_with_data();

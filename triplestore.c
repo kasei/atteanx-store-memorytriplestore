@@ -42,6 +42,12 @@ double triplestore_elapsed_time ( double start ) {
 	return elapsed;
 }
 
+static void __indent(FILE* f, int depth) {
+	for (int x = 0; x < depth; x++) {
+		fprintf(f, "\t");
+	}
+}
+
 #pragma mark -
 #pragma mark RDF Terms
 
@@ -675,84 +681,31 @@ int triplestore_free_path(path_t* path) {
 	return 0;
 }
 
-void __indent(FILE* f, int depth) {
-	for (int x = 0; x < depth; x++) {
-		fprintf(f, "\t");
-	}
-}
-
-int _triplestore_path_step(triplestore_t* t, path_t* path, int64_t s, char* seen, int depth, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+int _triplestore_path_step(triplestore_t* t, nodeid_t s, nodeid_t pred, char* seen, int depth, int(^block)(nodeid_t reached)) {
 // 	__indent(stderr, depth);
 // 	fprintf(stderr, "matching path %"PRId64" (%"PRIu32") %"PRId64"\n", s, path->pred, path->end);
-	int64_t sv	= -s;
-	int reset_s	= 0;
-	if (s < 0) {
-		if (current_match[sv] > 0) {
-			s	= current_match[sv];
-			if (s == 0) {
-				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", sv);
-				assert(0);
-			}
-		} else {
-			reset_s	= 1;
-		}
-	}
-
+	assert(s > 0);
+	
+	
+	
 // 	__indent(stderr, depth);
 // 	fprintf(stderr, "matching triple %"PRId64" %"PRIu32" 0\n", s, path->pred);
-	int r	= triplestore_match_triple(t, s, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+	int r	= triplestore_match_triple(t, s, pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 		if (seen[_o]) {
 			return 0;
-		}
-		
-// 		__indent(stderr, depth);
-// 		fprintf(stderr, "got triple --> %"PRIu32" %"PRIu32" %"PRIu32"\n", _s, _p, _o);
+		} else {
+			seen[_o]	= 1;
+	// 		__indent(stderr, depth);
+	// 		fprintf(stderr, "got triple --> %"PRIu32" %"PRIu32" %"PRIu32"\n", _s, _p, _o);
 
-		int reset_s	= 0;
-		if (s < 0) {
-			reset_s	= 1;
-// 			__indent(stderr, depth);
-// 			fprintf(stderr, "-> setting %"PRId64" to %"PRIu32"\n", sv, _s);
-			current_match[sv]	= _s;
-		}
-		int ok		= 0;
-		if (path->end < 0) {
-// 			__indent(stderr, depth);
-// 			fprintf(stderr, "-> setting %"PRId64" to %"PRIu32"\n", path->end, _o);
-			current_match[-(path->end)]	= _o;
-			ok		= 1;
-		} else if (_o == path->end) {
-			ok	= 1;
-		}
-		
-		if (ok) {
-			if (block(current_match)) {
+			if (block(_o)) {
 				return 1;
 			}
+			
+			int r	= _triplestore_path_step(t, _o, pred, seen, 1+depth, block);
+			return r;
 		}
-		
-		if (path->end < 0) {
-// 			__indent(stderr, depth);
-// 			fprintf(stderr, "resetting %"PRId64"\n", path->end);
-			current_match[-(path->end)]	= 0;
-		}
-		
-		int r	= 0;
-		seen[_o]++;
-		r	= _triplestore_path_step(t, path, _o, seen, 1+depth, current_match, block);
-// 		seen[_o]--;
-		return r;
 	});
-	
-	if (reset_s) {
-		seen[s]--;
-	}
-
-	if (reset_s) {
-// 		__indent(stderr, depth);
-// 		fprintf(stderr, "resetting %"PRId64"\n", sv);
-		current_match[sv]	= 0;
-	}
 	return r;
 }
 
@@ -764,7 +717,35 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 	int r	= 0;
 	if (path->type == PATH_STAR || path->type == PATH_PLUS) {
 		char* seen	= calloc(1, t->nodes_used);
-		r			= _triplestore_path_step(t, path, path->start, seen, 0, current_match, block);
+		int r;
+		if (path->start <= 0) {
+			char* starts	= calloc(1, t->nodes_used);
+			r	= triplestore_match_triple(t, path->start, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+				if (starts[_s]++) {
+					return 0;
+				}
+				memset(seen, 0, t->nodes_used);
+				current_match[-(path->start)]	= _s;
+				return _triplestore_path_step(t, _s, path->pred, seen, 0, ^(nodeid_t reached) {
+					if (path->end < 0) {
+						current_match[-(path->end)]	= reached;
+					} else if (path->end > 0) {
+						if (reached != path->end) {
+							return 0;
+						}
+					}
+					return block(current_match);
+				});
+			});
+			free(starts);
+		} else {
+			r	= _triplestore_path_step(t, path->start, path->pred, seen, 0, ^(nodeid_t reached) {
+				if (path->end < 0) {
+					current_match[-(path->end)]	= reached;
+				}
+				return block(current_match);
+			});
+		}
 		free(seen);
 	}
 	return r;
@@ -1146,10 +1127,20 @@ static void _print_term_or_variable(triplestore_t* t, int variables, char** vari
 	if (s == 0) {
 		fprintf(f, "[]");
 	} else if (s < 0) {
-		fprintf(f, "%s", variable_names[-s]);
+		fprintf(f, "?%s", variable_names[-s]);
 	} else {
 		triplestore_print_term(t, s, f, 0);
 	}
+}
+
+void triplestore_print_path(triplestore_t* t, query_t* query, path_t* path, FILE* f) {
+	fprintf(f, "Path: ");
+	_print_term_or_variable(t, query->variables, query->variable_names, path->start, f);
+	fprintf(f, " ");
+	_print_term_or_variable(t, query->variables, query->variable_names, path->pred, f);
+	fprintf(f, " ");
+	_print_term_or_variable(t, query->variables, query->variable_names, path->end, f);
+	fprintf(f, "\n");
 }
 
 void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* filter, FILE* f) {
@@ -1240,6 +1231,8 @@ void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op
 		triplestore_print_bgp(t, op->ptr, query->variables, query->variable_names, f);
 	} else if (op->type == QUERY_FILTER) {
 		triplestore_print_filter(t, query, op->ptr, f);
+	} else if (op->type == QUERY_PATH) {
+		triplestore_print_path(t, query, op->ptr, f);
 	} else {
 		fprintf(stderr, "*** Unrecognized query op %d\n", op->type);
 	}

@@ -196,8 +196,10 @@ handle_new_triple_object (SV* closure, rdf_term_t* subject, rdf_term_t* predicat
 void
 handle_new_result_object (triplestore_t* t, SV* closure, int variables, char** variable_names, nodeid_t* match) {
 	HV*	hash	= newHV();
+	// fprintf(stderr, "constructing result from table:\n");
 	for (int j = 1; j <= variables; j++) {
-		nodeid_t id	= match[j];
+		nodeid_t id			= match[j];
+		// fprintf(stderr, "[%d]: %"PRIu32"\n", j, id);
 		rdf_term_t* term	= t->graph[id]._term;
 		SV* object			= rdf_term_to_object(term);
 		const char* key		= variable_names[j];

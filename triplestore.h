@@ -17,9 +17,9 @@ typedef enum {
 } rdf_term_type_t;
 
 typedef enum {
-	QUERY_BGP,
-	QUERY_FILTER,
-	QUERY_PATH,
+	QUERY_BGP					= 1,
+	QUERY_FILTER				= 2,
+	QUERY_PATH					= 3,
 } query_type_t;
 
 typedef enum {
