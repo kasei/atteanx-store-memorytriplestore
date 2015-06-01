@@ -135,6 +135,39 @@ test 'store-planning for BGP type+REGEX filter' => sub {
 	is($count, 0, 'Expected result count');
 };
 
+test 'store-planning for BGP string filter' => sub {
+	my $self	= shift;
+	my $store	= $self->_store_with_path_data();
+	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
+	my $planner	= Attean::IDPQueryPlanner->new();
+
+	my $pat		= 'o';
+	my $pattern	= Attean::ValueExpression->new(value => literal($pat));
+	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://xmlns.com/foaf/0.1/name'), variable('name'));
+	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
+	my $var		= Attean::ValueExpression->new(value => variable('name'));
+	my $expr1	= Attean::FunctionExpression->new( children => [$var, $pattern], operator => 'contains' );
+	my $filter	= Attean::Algebra::Filter->new(children => [$bgp], expression => $expr1);
+
+	my $plan	= $planner->plan_for_algebra($filter, $model, [$graph]);
+	
+	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::FilteredBGPPlan');
+	is($plan->filter_count, 1, 'Store-provided plan represents both filters');
+	
+	my $iter	= $plan->evaluate();
+	my $count	= 0;
+	my %expect	= (
+		'Timothy'	=> 1,
+		'Robert'	=> 1,
+	);
+	while (my $r = $iter->next) {
+		$count++;
+		ok(exists $expect{$r->value('name')->value}, 'expected literal contains pattern');
+	}
+	is($count, 2, 'Expected result count');
+};
+
 test 'OnOrMore path with ground subject' => sub {
 	my $self	= shift;
 	my $store	= $self->_store_with_path_data();
@@ -193,7 +226,6 @@ test 'OnOrMore path with variable subject' => sub {
 	my $count	= 0;
 	my %seen;
 	while (my $r = $iter->next) {
-# 		say $r->as_string;
 		$count++;
 		$seen{ $r->value('s')->value }{ $r->value('o')->value }++;
 	}

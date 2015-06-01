@@ -392,6 +392,21 @@ triplestore_match_bgp_with_filter_cb(triplestore_t* t, IV triples, IV variables,
 					char* pattern	= SvPV_nolen(*pat);
 					query_filter_t* filter	= triplestore_new_filter(FILTER_STRSTARTS, varid, pattern);
 					triplestore_query_add_op(query, QUERY_FILTER, filter);
+				} else if (type == FILTER_CONTAINS) {
+					SV** var	= hv_fetch(hash, "variable", 8, 0);
+					SV** pat	= hv_fetch(hash, "pattern", 7, 0);
+					if (!var) {
+						croak("No variable in CONTAINS filter");
+						continue;
+					}
+					if (!pat) {
+						croak("No pattern in CONTAINS filter");
+						continue;
+					}
+					int64_t varid	= (int64_t) SvIV(*var);
+					char* pattern	= SvPV_nolen(*pat);
+					query_filter_t* filter	= triplestore_new_filter(FILTER_CONTAINS, varid, pattern);
+					triplestore_query_add_op(query, QUERY_FILTER, filter);
 				} else {
 					croak("Unexpected filter type %d", type);
 					return;

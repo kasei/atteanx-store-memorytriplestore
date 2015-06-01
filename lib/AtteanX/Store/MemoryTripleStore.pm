@@ -379,6 +379,19 @@ Otherwise, returns an empty list.
 						}
 						push(@{ $data->{filters} }, $type, {variable => $var});
 						$ok	= 1;
+					} elsif ($s =~ /^(?:CONTAINS|STRSTARTS|STRENDS)\([?]\w+, "[^"]+"\)$/) {
+						my $var		= $expr->children->[0]->value;
+						my $pattern	= $expr->children->[1]->value;
+						my $type;
+						if ($s =~ /CONTAINS/) {
+							$type	= FILTER_CONTAINS;
+						} elsif ($s =~ /STARTS/) {
+							$type	= FILTER_STRSTARTS;
+						} elsif ($s =~ /ENDS/) {
+							$type	= FILTER_STRENDS;
+						}
+						push(@{ $data->{filters} }, $type, {variable => $var, pattern => $pattern});
+						$ok	= 1;
 					}
 					
 					if ($ok) {
@@ -530,7 +543,7 @@ package AtteanX::Store::MemoryTripleStore::FilteredBGPPlan 0.001 {
 		my $model	= shift;
 		my $count	= $self->filter_count;
 		
-		return sprintf('MemoryTripleStoreBGP ($count filters)', $count);
+		return sprintf('MemoryTripleStoreBGP (%d filters)', $count);
 	}
 
 	sub impl {
