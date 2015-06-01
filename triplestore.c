@@ -367,9 +367,9 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 	t->edges_used	= edges;
 	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
 	
-	t->graph		= calloc(sizeof(graph_node_t), 1+nodes);
-	hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
+	t->graph				= calloc(sizeof(graph_node_t), 1+nodes);
 	for (uint32_t i = 1; i <= nodes; i++) {
+		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
 		_triplestore_load_node(fd, i, &(t->graph[i]));
 		item->_term	= t->graph[i]._term;
 		item->id	= i;
@@ -387,6 +387,19 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 		t->edges[i].next_in		= ntohl(t->edges[i].next_in);
 		t->edges[i].next_out	= ntohl(t->edges[i].next_out);
 	}
+
+
+// 	if (0) {
+// 		size_t used	= avl_count( t->dictionary );
+// 		struct avl_traverser iter;
+// 		avl_t_init( &iter, t->dictionary );
+// 		hx_nodemap_item* item	= NULL;
+// 		while ((item = (hx_nodemap_item*) avl_t_next( &iter )) != NULL) {
+// 			char* string		= triplestore_term_to_string(t, item->_term);
+// 			fprintf( stdout, "%-10"PRIu32"\t%s\n", item->id, string );
+// 			free( string );
+// 		}
+// 	}
 
 	return 0;
 }
@@ -853,6 +866,7 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 }
 
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
+// 	triplestore_print_query(t, query, stderr);
 	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+query->variables);
 	current_match[0]	= query->variables;
 	int r	= _triplestore_query_op_match(t, query, query->head, current_match, block);
