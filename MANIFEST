@@ -14,3 +14,7 @@ t/simple.t
 t/store-triple.t
 Changes.ttl
 README.md
+TODO.md
+linenoise.h
+linenoise.c
+Makefile.cli
