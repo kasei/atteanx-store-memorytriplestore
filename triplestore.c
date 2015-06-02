@@ -442,14 +442,22 @@ int triplestore_table_add_row(table_t* table, nodeid_t* result) {
 	return 0;
 }
 
+struct _sort_s {
+	triplestore_t* t;
+	sort_t* sort;
+};
+
 int _table_row_cmp(void* thunk, const void* a, const void* b) {
-	triplestore_t* t	= (triplestore_t*) thunk;
-	uint32_t width	= *( (uint32_t*) a );
-	uint32_t* ap	= (uint32_t*) a;
-	uint32_t* bp	= (uint32_t*) b;
-	for (int i = 1; i <= width; i++) {
-		nodeid_t aid	= ap[i];
-		nodeid_t bid	= bp[i];
+	struct _sort_s* s	= (struct _sort_s*) thunk;
+	triplestore_t* t	= s->t;
+	sort_t* sort		= s->sort;
+	uint32_t width		= sort->size;
+	uint32_t* ap		= (uint32_t*) a;
+	uint32_t* bp		= (uint32_t*) b;
+	for (int i = 0; i < width; i++) {
+		int64_t slot	= -(sort->vars[i]);
+		nodeid_t aid	= ap[slot];
+		nodeid_t bid	= bp[slot];
 		rdf_term_t* aterm	= t->graph[aid]._term;
 		rdf_term_t* bterm	= t->graph[bid]._term;
 		
@@ -465,9 +473,10 @@ int _table_row_cmp(void* thunk, const void* a, const void* b) {
 	return 0;
 }
 
-int triplestore_table_sort(triplestore_t* t, table_t* table) {
+int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort) {
+	struct _sort_s s	= { .t = t, .sort = sort };
 	size_t bytes	= (1+table->width) * sizeof(nodeid_t);
-	qsort_r(table->ptr, table->used, bytes, t, _table_row_cmp);
+	qsort_r(table->ptr, table->used, bytes, &s, _table_row_cmp);
 	return 0;
 }
 
@@ -776,6 +785,34 @@ int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, n
 
 
 #pragma mark -
+#pragma mark Sorting
+
+sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables) {
+	sort_t* sort	= calloc(sizeof(int64_t), 1);
+	sort->size		= variables;
+	sort->vars		= calloc(1, variables);
+	sort->table		= triplestore_new_table(result_width);
+	return sort;
+}
+
+int triplestore_free_sort(sort_t* sort) {
+	triplestore_free_table(sort->table);
+	free(sort->vars);
+	free(sort);
+	return 0;
+}
+
+int triplestore_set_sort(sort_t* sort, int rank, int64_t var) {
+	sort->vars[rank]	= var;
+	return 0;
+}
+
+int _triplestore_sort_fill(triplestore_t* t, query_t* query, sort_t* sort, nodeid_t* current_match) {
+	return triplestore_table_add_row(sort->table, current_match);
+}
+
+
+#pragma mark -
 #pragma mark Paths
 
 path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end) {
@@ -898,6 +935,9 @@ int triplestore_free_query_op(query_op_t* op) {
 		case QUERY_PROJECT:
 			triplestore_free_project(op->ptr);
 			break;
+		case QUERY_SORT:
+			triplestore_free_sort(op->ptr);
+			break;
 		default:
 			fprintf(stderr, "Unrecognized query operation %d\n", op->type);
 			return 1;
@@ -977,22 +1017,39 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 				return _triplestore_path_match(t, op->ptr, current_match, ^(nodeid_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
+			case QUERY_SORT:
+				return _triplestore_sort_fill(t, query, op->ptr, current_match);
 			default:
 				fprintf(stderr, "Unrecognized query op in _triplestore_query_op_match: %d\n", op->type);
 				return 1;
 		};
 	} else {
-		block(current_match);
+		return block(current_match);
 	}
-	return 0;
 }
 
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
 // 	triplestore_print_query(t, query, stderr);
 	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+query->variables);
 	current_match[0]	= query->variables;
-	int r	= _triplestore_query_op_match(t, query, query->head, current_match, block);
+	query_op_t* op		= query->head;
+	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
 	free(current_match);
+	
+	while (1) {
+		if (!op) break;
+		if (op->type == QUERY_SORT) {
+			sort_t* sort	= (sort_t*) op->ptr;
+			table_t* table	= sort->table;
+			triplestore_table_sort(t, table, sort);
+			for (uint32_t row = 0; row < table->used; row++) {
+				uint32_t* result	= triplestore_table_row_ptr(table, row);
+				_triplestore_query_op_match(t, query, op->next, result, block);
+			}
+		}
+		op	= op->next;
+	}
+	
 	return r;
 }
 
@@ -1288,6 +1345,14 @@ void triplestore_print_project(triplestore_t* t, query_t* query, project_t* proj
 	}
 }
 
+void triplestore_print_sort(triplestore_t* t, query_t* query, sort_t* sort, FILE* f) {
+	fprintf(f, "Sort:\n");
+	for (int i = 0; i <= sort->size; i++) {
+		int64_t var	= sort->vars[i];
+		fprintf(f, "  - ?%s\n", query->variable_names[-var]);
+	}
+}
+
 void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* filter, FILE* f) {
 	fprintf(f, "Filter: ");
 	switch (filter->type) {
@@ -1372,6 +1437,8 @@ void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op
 		triplestore_print_bgp(t, op->ptr, query->variables, query->variable_names, f);
 	} else if (op->type == QUERY_PROJECT) {
 		triplestore_print_project(t, query, op->ptr, f);
+	} else if (op->type == QUERY_SORT) {
+		triplestore_print_sort(t, query, op->ptr, f);
 	} else if (op->type == QUERY_FILTER) {
 		triplestore_print_filter(t, query, op->ptr, f);
 	} else if (op->type == QUERY_PATH) {

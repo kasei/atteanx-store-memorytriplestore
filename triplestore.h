@@ -21,6 +21,7 @@ typedef enum {
 	QUERY_FILTER				= 2,
 	QUERY_PATH					= 3,
 	QUERY_PROJECT				= 4,
+	QUERY_SORT					= 5,
 } query_type_t;
 
 typedef enum {
@@ -107,6 +108,12 @@ typedef struct project_s {
 	char* keep;
 } project_t;
 
+typedef struct sort_s {
+	int size;
+	int64_t* vars;
+	table_t* table;
+} sort_t;
+
 typedef struct query_filter_s {
 	filter_type_t type;
 	int64_t node1;	// var
@@ -182,11 +189,16 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...);
 int triplestore_free_filter(query_filter_t* filter);
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
 
+// Sorting
+sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables);
+int triplestore_free_sort(sort_t* sort);
+int triplestore_set_sort(sort_t* sort, int rank, int64_t var);
+
 // Result Tables
 table_t* triplestore_new_table(int width);
 int triplestore_free_table(table_t* table);
 int triplestore_table_add_row(table_t* table, nodeid_t* result);
-int triplestore_table_sort(triplestore_t* t, table_t* table);
+int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort);
 uint32_t* triplestore_table_row_ptr(table_t* table, int row);
 
 // Projection

@@ -322,8 +322,12 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		query_t* query	= ctx->query;
 		ctx->query	= NULL;
 		ctx->constructing	= 0;
-		_triplestore_run_query(t, query, ctx, f);
-		triplestore_free_query(query);
+		if (query) {
+			_triplestore_run_query(t, query, ctx, f);
+			triplestore_free_query(query);
+		} else {
+			fprintf(stderr, "No query available\n");
+		}
 	} else if (!strcmp(op, "bgp")) {
 		if (ctx->constructing && ctx->query) {
 			fprintf(stderr, "*** Cannot add a BGP to an existing query\n");
@@ -380,6 +384,25 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 
 		_triplestore_run_query(t, query, ctx, f);
 		triplestore_free_query(query);
+	} else if (!strcmp(op, "sort")) {
+		if (ctx->constructing == 0) {
+			fprintf(stderr, "sort can only be used during query construction\n");
+			return 1;
+		}
+		query_t* query	= ctx->query;
+		int svars		= argc-i-1;
+		fprintf(stderr, "%d sort variables\n", svars);
+		sort_t* sort	= triplestore_new_sort(t, query->variables, svars);
+		for (int j = 0; j < svars; j++) {
+			const char* var	= argv[j+i+1];
+			int64_t v	= _triplestore_query_get_variable_id(query, var);
+			if (v == 0) {
+				return 1;
+			}
+			fprintf(stderr, "setting sort variable #%d to ?%s (%"PRId64")\n", j, var, v);
+			triplestore_set_sort(sort, j, v);
+		}
+		triplestore_query_add_op(ctx->query, QUERY_SORT, sort);
 	} else if (!strcmp(op, "project")) {
 		if (ctx->constructing == 0) {
 			fprintf(stderr, "project can only be used during query construction\n");
@@ -526,7 +549,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		});
 
 		int count	= table->used;
-		triplestore_table_sort(t, table);
+// 		triplestore_table_sort(t, table);
 		if (f != NULL) {
 			for (int row = 0; row < count; row++) {
 				uint32_t* result	= triplestore_table_row_ptr(table, row);
@@ -629,6 +652,16 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		return 1;
 	}
 	return 0;
+}
+
+int triplestore_vop(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, ...) {
+	va_list ap;
+	va_start(ap, argc);
+	char* argv[argc];
+	for (int i = 0; i < argc; i++) {
+		argv[i]	= va_arg(ap, char*);
+	}
+	return triplestore_op(t, ctx, argc, argv);
 }
 
 void usage(int argc, char** argv, FILE* f) {
