@@ -405,6 +405,73 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 }
 
 #pragma mark -
+#pragma mark Result Tables
+
+table_t* triplestore_new_table(int width) {
+	table_t* table	= calloc(1, sizeof(table_t));
+	table->width	= width;
+	table->alloc	= 128;
+	table->used		= 0;
+	table->ptr		= calloc(table->alloc, (1+width) * sizeof(nodeid_t));
+	return table;
+}
+
+int triplestore_free_table(table_t* table) {
+	free(table->ptr);
+	free(table);
+	return 0;
+}
+
+uint32_t* triplestore_table_row_ptr(table_t* table, int row) {
+	nodeid_t* p	= &( table->ptr[ row*(1+table->width) ] );
+	return p;
+}
+
+int triplestore_table_add_row(table_t* table, nodeid_t* result) {
+	if (table->used == table->alloc) {
+		table->alloc	*= 2;
+		table->ptr	= realloc(table->ptr, table->alloc * (1+table->width) * sizeof(nodeid_t));
+		if (table->ptr == NULL) {
+			fprintf(stderr, "failed to grow table size\n");
+			return 1;
+		}
+	}
+	int i	= table->used++;
+	nodeid_t* p	= &( table->ptr[ i*(1+table->width) ] );
+	memcpy(p, result, (1+table->width) * sizeof(nodeid_t));
+	return 0;
+}
+
+int _table_row_cmp(void* thunk, const void* a, const void* b) {
+	triplestore_t* t	= (triplestore_t*) thunk;
+	uint32_t width	= *( (uint32_t*) a );
+	uint32_t* ap	= (uint32_t*) a;
+	uint32_t* bp	= (uint32_t*) b;
+	for (int i = 1; i <= width; i++) {
+		nodeid_t aid	= ap[i];
+		nodeid_t bid	= bp[i];
+		rdf_term_t* aterm	= t->graph[aid]._term;
+		rdf_term_t* bterm	= t->graph[bid]._term;
+		
+		char* as	= triplestore_term_to_string(t, aterm);
+		char* bs	= triplestore_term_to_string(t, bterm);
+		int r		= strcmp(as, bs);
+		free(as);
+		free(bs);
+		if (r) {
+			return r;
+		}
+	}
+	return 0;
+}
+
+int triplestore_table_sort(triplestore_t* t, table_t* table) {
+	size_t bytes	= (1+table->width) * sizeof(nodeid_t);
+	qsort_r(table->ptr, table->used, bytes, t, _table_row_cmp);
+	return 0;
+}
+
+#pragma mark -
 #pragma mark Filters
 
 query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
@@ -678,6 +745,37 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^bloc
 }
 
 #pragma mark -
+#pragma mark Projection
+
+project_t* triplestore_new_project(triplestore_t* t, int variables) {
+	project_t* project	= calloc(sizeof(project_t), 1);
+	project->size	= variables;
+	project->keep	= calloc(1, 1+variables);
+	return project;
+}
+
+int triplestore_free_project(project_t* project) {
+	free(project->keep);
+	free(project);
+	return 0;
+}
+
+int triplestore_set_projection(project_t* project, int64_t var) {
+	project->keep[var]	= 1;
+	return 0;
+}
+
+int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+	for (int i = 1; i <= project->size; i++) {
+		if (project->keep[i] == 0) {
+			current_match[i]	= 0;
+		}
+	}
+	return block(current_match);
+}
+
+
+#pragma mark -
 #pragma mark Paths
 
 path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end) {
@@ -797,6 +895,9 @@ int triplestore_free_query_op(query_op_t* op) {
 		case QUERY_FILTER:
 			triplestore_free_filter(op->ptr);
 			break;
+		case QUERY_PROJECT:
+			triplestore_free_project(op->ptr);
+			break;
 		default:
 			fprintf(stderr, "Unrecognized query operation %d\n", op->type);
 			return 1;
@@ -820,9 +921,26 @@ int triplestore_free_query(query_t* query) {
 }
 
 int triplestore_query_set_variable_name(query_t* query, int variable, const char* name) {
+	triplestore_ensure_variable_capacity(query, variable);
 	query->variable_names[variable]	= calloc(1, 1+strlen(name));
 	strcpy(query->variable_names[variable], name);
 	return 0;
+}
+
+int triplestore_ensure_variable_capacity(query_t* query, int var) {
+	if (var > query->variables) {
+		query->variables	= var;
+		query->variable_names	= realloc(query->variable_names, sizeof(char*) * (1+query->variables));
+		return 1;
+	}
+	return 0;
+}
+
+int triplestore_query_add_variable(query_t* query, const char* name) {
+	int var	= 1 + query->variables;
+	triplestore_ensure_variable_capacity(query, var);
+	triplestore_query_set_variable_name(query, var, name);
+	return var;
 }
 
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
@@ -849,6 +967,10 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 				});
 			case QUERY_FILTER:
 				return _triplestore_filter_match(t, query, op->ptr, current_match, ^(nodeid_t* final_match){
+					return _triplestore_query_op_match(t, query, op->next, final_match, block);
+				});
+			case QUERY_PROJECT:
+				return _triplestore_project(t, query, op->ptr, current_match, ^(nodeid_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_PATH:
@@ -1157,6 +1279,15 @@ void triplestore_print_path(triplestore_t* t, query_t* query, path_t* path, FILE
 	fprintf(f, "\n");
 }
 
+void triplestore_print_project(triplestore_t* t, query_t* query, project_t* project, FILE* f) {
+	fprintf(f, "Project:\n");
+	for (int i = 0; i < project->size; i++) {
+		if (project->keep[i]) {
+			fprintf(f, "  - ?%s\n", query->variable_names[i]);
+		}
+	}
+}
+
 void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* filter, FILE* f) {
 	fprintf(f, "Filter: ");
 	switch (filter->type) {
@@ -1243,6 +1374,8 @@ void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** v
 void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op, FILE* f) {
 	if (op->type == QUERY_BGP) {
 		triplestore_print_bgp(t, op->ptr, query->variables, query->variable_names, f);
+	} else if (op->type == QUERY_PROJECT) {
+		triplestore_print_project(t, query, op->ptr, f);
 	} else if (op->type == QUERY_FILTER) {
 		triplestore_print_filter(t, query, op->ptr, f);
 	} else if (op->type == QUERY_PATH) {

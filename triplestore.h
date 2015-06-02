@@ -20,6 +20,7 @@ typedef enum {
 	QUERY_BGP					= 1,
 	QUERY_FILTER				= 2,
 	QUERY_PATH					= 3,
+	QUERY_PROJECT				= 4,
 } query_type_t;
 
 typedef enum {
@@ -40,6 +41,13 @@ typedef enum {
     // Numeric logical testing (var, const)
     // Date logical testing (var, const)
 } filter_type_t;
+
+typedef struct table_s {
+	int alloc;
+	int used;
+	int width;
+	nodeid_t* ptr;
+} table_t;
 
 typedef struct rdf_term_s {
 	rdf_term_type_t type;
@@ -93,6 +101,11 @@ typedef struct path_s {
 	int64_t end;
 	nodeid_t pred;
 } path_t;
+
+typedef struct project_s {
+	int size;
+	char* keep;
+} project_t;
 
 typedef struct query_filter_s {
 	filter_type_t type;
@@ -149,6 +162,8 @@ int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline);
 query_t* triplestore_new_query(triplestore_t* t, int variables);
 int triplestore_free_query(query_t* query);
 int triplestore_query_set_variable_name(query_t* query, int variable, const char* name);
+int triplestore_ensure_variable_capacity(query_t* query, int var);
+int triplestore_query_add_variable(query_t* query, const char* name);
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match));
 
@@ -162,12 +177,19 @@ path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, 
 int triplestore_free_path(path_t* path);
 int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(nodeid_t* final_match));
 
-
+// Filters
 query_filter_t* triplestore_new_filter(filter_type_t type, ...);
 int triplestore_free_filter(query_filter_t* filter);
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
 
+// Result Tables
+table_t* triplestore_new_table(int width);
+int triplestore_free_table(table_t* table);
+int triplestore_table_add_row(table_t* table, nodeid_t* result);
+int triplestore_table_sort(triplestore_t* t, table_t* table);
+uint32_t* triplestore_table_row_ptr(table_t* table, int row);
 
-
-
-
+// Projection
+project_t* triplestore_new_project(triplestore_t* t, int variables);
+int triplestore_free_project(project_t* project);
+int triplestore_set_projection(project_t* project, int64_t var);
