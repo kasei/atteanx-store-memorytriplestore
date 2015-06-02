@@ -761,7 +761,7 @@ int triplestore_free_project(project_t* project) {
 }
 
 int triplestore_set_projection(project_t* project, int64_t var) {
-	project->keep[var]	= 1;
+	project->keep[-var]	= 1;
 	return 0;
 }
 
@@ -1281,7 +1281,7 @@ void triplestore_print_path(triplestore_t* t, query_t* query, path_t* path, FILE
 
 void triplestore_print_project(triplestore_t* t, query_t* query, project_t* project, FILE* f) {
 	fprintf(f, "Project:\n");
-	for (int i = 0; i < project->size; i++) {
+	for (int i = 0; i <= project->size; i++) {
 		if (project->keep[i]) {
 			fprintf(f, "  - ?%s\n", query->variable_names[i]);
 		}
@@ -1351,10 +1351,6 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 }
 
 void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** variable_names, FILE* f) {
-	fprintf(f, "- Variables: %d\n", variables);
-	for (int v = 1; v <= variables; v++) {
-		fprintf(f, "  - %s\n", variable_names[v]);
-	}
 	fprintf(f, "- Triples: %d\n", bgp->triples);
 	for (int i = 0; i < bgp->triples; i++) {
 		int64_t s	= bgp->nodes[3*i+0];

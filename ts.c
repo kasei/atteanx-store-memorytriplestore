@@ -267,6 +267,20 @@ int _triplestore_run_query(triplestore_t* t, query_t* query, struct runtime_ctx_
 	return 0;
 }
 
+int64_t _triplestore_query_get_variable_id(query_t* query, const char* var) {
+	int64_t v	= 0;
+	for (int x = 1; x <= query->variables; x++) {
+		if (!strcmp(var, query->variable_names[x])) {
+			v	= -x;
+			break;
+		}
+	}
+	if (v == 0) {
+		fprintf(stderr, "Unexpected variable ?%s\n", var);
+	}
+	return v;
+}
+
 int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char** argv) {
 	if (argc == 0) {
 		return 1;
@@ -375,15 +389,8 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		project_t* project	= triplestore_new_project(t, query->variables);
 		for (int j = i+1; j < argc; j++) {
 			const char* var	= argv[j];
-			int64_t v	= 0;
-			for (int x = 1; x <= query->variables; x++) {
-				if (!strcmp(var, query->variable_names[x])) {
-					v	= x;
-					break;
-				}
-			}
+			int64_t v	= _triplestore_query_get_variable_id(query, var);
 			if (v == 0) {
-				fprintf(stderr, "Unexpected variable ?%s\n", var);
 				return 1;
 			}
 			triplestore_set_projection(project, v);
@@ -392,8 +399,19 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		triplestore_query_add_op(ctx->query, QUERY_PROJECT, project);
 	} else if (!strcmp(op, "filter")) {
 		const char* op	= argv[++i];
-		int64_t var		= atoi(argv[++i]);
+		const char* vs	= argv[++i];
 		const char* pat	= argv[++i];
+		query_t* query;
+		if (ctx->constructing) {
+			query	= ctx->query;
+		} else {
+			query	= construct_bgp_query(t, ctx, argc, argv, i);
+		}
+		
+		int64_t var		= _triplestore_query_get_variable_id(query, vs);
+		if (var == 0) {
+			return 1;
+		}
 		
 		query_filter_t* filter;
 		if (!strcmp(op, "starts")) {
@@ -413,7 +431,6 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			return 0;
 		}
 		
-		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
 		triplestore_query_add_op(query, QUERY_FILTER, filter);
 		_triplestore_run_query(t, query, ctx, f);
 		triplestore_free_query(query);
@@ -542,14 +559,24 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" triples\n", elapsed, count);
 		}
 	} else if (!strcmp(op, "agg")) {
-		int64_t groupvar	= atoi(argv[++i]);
-		const char* op	= argv[++i];
-		int64_t var		= atoi(argv[++i]);
-		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
-		int aggid		= triplestore_query_add_variable(query, ".agg");
+		const char* gs		= argv[++i];
+		const char* op		= argv[++i];
+		const char* vs		= argv[++i];
+		query_t* query;
+		if (ctx->constructing) {
+			query		= ctx->query;
+		} else {
+			query		= construct_bgp_query(t, ctx, argc, argv, i);
+		}
+		int64_t groupvar	= _triplestore_query_get_variable_id(query, gs);
+		if (groupvar == 0) {
+			return 1;
+		}
+// 		int64_t var			= strcmp(vs, "*") ? _triplestore_query_get_variable_id(query, vs) : 0;
+// 		int aggid			= triplestore_query_add_variable(query, ".agg");
 		if (ctx->verbose) {
 			fprintf(stderr, "------------------------\n");		
-			fprintf(stderr, "Matching Aggregate Query: %s(%d) ?%s\n", op, aggid, query->variable_names[-var]);
+			fprintf(stderr, "Matching Aggregate Query: (GROUP BY %s) %s %s\n", gs, op, vs);
 			triplestore_print_query(t, query, stderr);
 			fprintf(stderr, "------------------------\n");		
 		}
@@ -559,10 +586,10 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		int* seen			= calloc(1, 1+t->nodes_used);
 		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
 			nodeid_t group	= 0;
-			if (groupvar == 0) {
+			if (groupvar != 0) {
 				group	= final_match[-groupvar];
-				fprintf(stderr, "aggregating in group %"PRIu32" ", group);
-				triplestore_print_term(t, group, stderr, 1);
+// 				fprintf(stderr, "aggregating in group %"PRIu32" ", group);
+// 				triplestore_print_term(t, group, stderr, 1);
 			}
 			counts[group]++;
 			return 0;
@@ -593,6 +620,10 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);
 		}
 		triplestore_free_query(query);
+		if (ctx->constructing) {
+			ctx->constructing	= 0;
+			ctx->query			= NULL;
+		}
 	} else {
 		fprintf(stderr, "Unrecognized operation '%s'\n", op);
 		return 1;
