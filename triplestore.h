@@ -56,7 +56,7 @@ typedef struct rdf_term_s {
 	union {
 		uint32_t value_id;
 		char* value_type;
-	};
+	} vtype;
 } rdf_term_t;
 
 typedef struct index_list_element_s {

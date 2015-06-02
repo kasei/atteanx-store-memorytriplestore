@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <arpa/inet.h>
 #include <time.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -58,10 +59,10 @@ rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype
 	strcpy(t->value, value);
 	
 	if (vtype) {
-		t->value_type	= calloc(1, 1+strlen(vtype));
-		strcpy(t->value_type, vtype);
+		t->vtype.value_type	= calloc(1, 1+strlen(vtype));
+		strcpy(t->vtype.value_type, vtype);
 	} else {
-		t->value_id	= vid;
+		t->vtype.value_id	= vid;
 	}
 	
 	return t;
@@ -70,7 +71,7 @@ rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype
 void free_rdf_term(rdf_term_t* t) {
 	free(t->value);
 	if (t->type == TERM_LANG_LITERAL) {
-		free(t->value_type);
+		free(t->vtype.value_type);
 	}
 	free(t);
 }
@@ -88,13 +89,13 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 		return 1;
 	} else {
 		if (a->type == TERM_LANG_LITERAL) {
-			int r	= strcmp(a->value_type, b->value_type);
+			int r	= strcmp(a->vtype.value_type, b->vtype.value_type);
 			if (r) {
 				return r;
 			}
 		} else if (a->type == TERM_TYPED_LITERAL) {
-			if (a->value_id != b->value_id) {
-				return (a->value_id - b->value_id);
+			if (a->vtype.value_id != b->vtype.value_id) {
+				return (a->vtype.value_id - b->vtype.value_id);
 			}
 		}
 		
@@ -122,13 +123,13 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 			break;
 		case TERM_LANG_LITERAL:
 			// TODO: handle escaping
-			string	= calloc(4+strlen(t->value)+strlen(t->value_type), 1);
-			sprintf(string, "\"%s\"@%s", t->value, t->value_type);
+			string	= calloc(4+strlen(t->value)+strlen(t->vtype.value_type), 1);
+			sprintf(string, "\"%s\"@%s", t->value, t->vtype.value_type);
 			break;
 		case TERM_TYPED_LITERAL:
 			// TODO: handle escaping
 			
-			extra	= triplestore_term_to_string(store, store->graph[ t->value_id ]._term);
+			extra	= triplestore_term_to_string(store, store->graph[ t->vtype.value_id ]._term);
 			
 			string	= calloc(7+strlen(t->value)+strlen(extra), 1);
 			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
@@ -236,9 +237,9 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	uint32_t type	= (uint32_t) term->type;
 	uint32_t extra_int	= 0;
 	if (type == TERM_LANG_LITERAL) {
-		extra_int	= strlen(term->value_type);
+		extra_int	= strlen(term->vtype.value_type);
 	} else if (type == TERM_TYPED_LITERAL) {
-		extra_int	= term->value_id;
+		extra_int	= term->vtype.value_id;
 	}
 	
 	char buffer[12];
@@ -249,7 +250,7 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	write(fd, buffer, 12);
 	write(fd, term->value, 1+vlen);
 	if (type == TERM_LANG_LITERAL) {
-		write(fd, term->value_type, 1+extra_int);
+		write(fd, term->vtype.value_type, 1+extra_int);
 	}
 	return 0;
 }
@@ -447,7 +448,11 @@ struct _sort_s {
 	sort_t* sort;
 };
 
+#ifdef __APPLE__
 int _table_row_cmp(void* thunk, const void* a, const void* b) {
+#else
+int _table_row_cmp(const void* a, const void* b, void* thunk) {
+#endif
 	struct _sort_s* s	= (struct _sort_s*) thunk;
 	triplestore_t* t	= s->t;
 	sort_t* sort		= s->sort;
@@ -476,7 +481,11 @@ int _table_row_cmp(void* thunk, const void* a, const void* b) {
 int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort) {
 	struct _sort_s s	= { .t = t, .sort = sort };
 	size_t bytes	= (1+table->width) * sizeof(nodeid_t);
+#ifdef __APPLE__
 	qsort_r(table->ptr, table->used, bytes, &s, _table_row_cmp);
+#else
+	qsort_r(table->ptr, table->used, bytes, _table_row_cmp, &s);
+#endif
 	return 0;
 }
 
@@ -788,9 +797,9 @@ int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, n
 #pragma mark Sorting
 
 sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables) {
-	sort_t* sort	= calloc(sizeof(int64_t), 1);
+	sort_t* sort	= calloc(sizeof(sort_t), 1);
 	sort->size		= variables;
-	sort->vars		= calloc(1, variables);
+	sort->vars		= calloc(sizeof(int64_t), variables);
 	sort->table		= triplestore_new_table(result_width);
 	return sort;
 }
@@ -1347,7 +1356,7 @@ void triplestore_print_project(triplestore_t* t, query_t* query, project_t* proj
 
 void triplestore_print_sort(triplestore_t* t, query_t* query, sort_t* sort, FILE* f) {
 	fprintf(f, "Sort:\n");
-	for (int i = 0; i <= sort->size; i++) {
+	for (int i = 0; i < sort->size; i++) {
 		int64_t var	= sort->vars[i];
 		fprintf(f, "  - ?%s\n", query->variable_names[-var]);
 	}
