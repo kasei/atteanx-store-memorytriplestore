@@ -146,7 +146,7 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			value_key	= newSVpvs("value");
 			class	= newSVpvs("Attean::Literal");
 			string	= newSVpv((const char*) term->value, 0);
-			lang	= newSVpv((const char*) term->value_type, 0);
+			lang	= newSVpv((const char*) term->vtype.value_type, 0);
 			object	= new_node_instance(aTHX_ class, 4, value_key, string, lang_key, lang);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(lang);
@@ -155,7 +155,7 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			return object;
 		case TERM_TYPED_LITERAL:
 			class		= newSVpvs("Attean::IRI");
-			dtvalue		= t->graph[ term->value_id ]._term->value;
+			dtvalue		= t->graph[ term->vtype.value_id ]._term->value;
 			value		= newSVpv(dtvalue, strlen(dtvalue));
 			dt			= new_node_instance(aTHX_ class, 1, value);
 			SvREFCNT_dec(value);
@@ -461,48 +461,6 @@ triplestore_match_path_cb(triplestore_t* t, IV path_type, IV variables, AV* ids,
 		triplestore_free_query(query);
 
 void
-triplestore_match_bgp_cb(triplestore_t* t, IV triples, IV variables, AV* ids, AV* names, int re_var, char* pattern, char* flags, SV* closure)
-	INIT:
-		int i;
-		SV** svp;
-		char* ptr;
-		bgp_t* bgp;
-		query_t* query;
-		IV iv;
-	CODE:
-		bgp = triplestore_new_bgp(t, variables, triples);
-		query = triplestore_new_query(t, variables);
-		for (i = 1; i <= variables; i++) {
-			svp	= av_fetch(names, i, 0);
-			ptr = SvPV_nolen(*svp);
-			triplestore_query_set_variable_name(query, i, ptr);
-		}
-		for (i = 0; i < triples; i++) {
-			SV **svs, **svp, **svo;
-			svs			= av_fetch(ids, 3*i+0, 0);
-			svp			= av_fetch(ids, 3*i+1, 0);
-			svo			= av_fetch(ids, 3*i+2, 0);
-			int64_t s	= (int64_t) SvIV(*svs);
-			int64_t p	= (int64_t) SvIV(*svp);
-			int64_t o	= (int64_t) SvIV(*svo);
-			triplestore_bgp_set_triple_nodes(bgp, i, s, p, o);
-		}
-		triplestore_query_add_op(query, QUERY_BGP, bgp);
-		
-		if (re_var < 0) {
-			// fprintf(stderr, "Adding REGEX filter: %s =~ /%s/%s\n", query->variable_names[-re_var], pattern, flags);
-			query_filter_t* filter	= triplestore_new_filter(FILTER_REGEX, re_var, pattern, flags);
-			triplestore_query_add_op(query, QUERY_FILTER, filter);
-		}
-		
-		// triplestore_print_query(t, query, stderr);
-		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
-			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
-			return 0;
-		});
-		triplestore_free_query(query);
-
-void
 triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)
 	CODE:
 		triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o){
@@ -524,37 +482,6 @@ triplestore__count_triples(triplestore_t* t, IV s, IV p, IV o)
 	OUTPUT:
 		RETVAL
 
-
-void
-triplestore_debug(triplestore_t* t)
-	CODE:
-		fprintf(stdout, "Triplestore:\n");
-		fprintf(stdout, "- Nodes: %"PRIu32"\n", t->nodes_used);
-		for (uint32_t i = 1; i <= t->nodes_used; i++) {
-			char* s	= triplestore_term_to_string(t, t->graph[i]._term);
-			fprintf(stdout, "       %4d: %s (out head: %"PRIu32"; in head: %"PRIu32")\n", i, s, t->graph[i].out_edge_head, t->graph[i].in_edge_head);
-			free(s);
-			nodeid_t idx	= t->graph[i].out_edge_head;
-			while (idx != 0) {
-				nodeid_t s	= t->edges[idx].p;
-				nodeid_t p	= t->edges[idx].p;
-				nodeid_t o	= t->edges[idx].o;
-				fprintf(stdout, "       -> %"PRIu32" %"PRIu32" %"PRIu32"\n", s, p, o);
-				idx			= t->edges[idx].next_out;
-			}
-		}
-		fprintf(stdout, "- Edges: %"PRIu32"\n", t->edges_used);
-
-void
-triplestore_debug_match(triplestore_t* t, char* pattern)
-	CODE:
-		fprintf(stderr, "matching graph nodes:\n");
-		for (nodeid_t s = 1; s < t->nodes_used; s++) {
-			char* string		= triplestore_term_to_string(t, t->graph[s]._term);
-			if (strstr(string, pattern)) {
-				fprintf(stderr, "%-7"PRIu32" %s\n", s, string);
-			}
-		}
 
 
 MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::IRI PREFIX = rdf_term_iri_
