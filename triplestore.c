@@ -366,7 +366,7 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 	t->nodes_used	= nodes;
 	t->edges_alloc	= edges;
 	t->edges_used	= edges;
-	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
+// 	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
 	
 	t->graph				= calloc(sizeof(graph_node_t), 1+nodes);
 	for (uint32_t i = 1; i <= nodes; i++) {
