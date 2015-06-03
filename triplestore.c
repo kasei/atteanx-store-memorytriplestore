@@ -985,11 +985,11 @@ int triplestore_ensure_variable_capacity(query_t* query, int var) {
 	return 0;
 }
 
-int triplestore_query_add_variable(query_t* query, const char* name) {
-	int var	= 1 + query->variables;
+int64_t triplestore_query_add_variable(query_t* query, const char* name) {
+	int64_t var	= 1 + query->variables;
 	triplestore_ensure_variable_capacity(query, var);
 	triplestore_query_set_variable_name(query, var, name);
-	return var;
+	return -var;
 }
 
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {

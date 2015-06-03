@@ -170,7 +170,7 @@ query_t* triplestore_new_query(triplestore_t* t, int variables);
 int triplestore_free_query(query_t* query);
 int triplestore_query_set_variable_name(query_t* query, int variable, const char* name);
 int triplestore_ensure_variable_capacity(query_t* query, int var);
-int triplestore_query_add_variable(query_t* query, const char* name);
+int64_t triplestore_query_add_variable(query_t* query, const char* name);
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match));
 

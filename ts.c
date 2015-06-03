@@ -187,41 +187,103 @@ void help(FILE* f) {
 	fprintf(f, "\n");
 }
 
+int64_t _triplestore_query_get_variable_id(query_t* query, const char* var) {
+	int64_t v	= 0;
+	char* p		= (char*) var;
+	if (p[0] == '?') {
+		p++;
+	}
+	for (int x = 1; x <= query->variables; x++) {
+		if (!strcmp(p, query->variable_names[x])) {
+			v	= -x;
+			break;
+		}
+	}
+// 	if (v == 0) {
+// 		fprintf(stderr, "Unexpected variable ?%s\n", var);
+// 	}
+	return v;
+}
+
+int64_t query_node_id(triplestore_t* t, query_t* query, const char* ts) {
+	int64_t id	= 0;
+	if (isdigit(ts[0])) {
+		id			= atoi(ts);
+	} else if (ts[0] == '<') {
+		char* p	= strstr(ts, ">");
+		int len	= p - ts;
+		char* value	= malloc(1 + len);
+		snprintf(value, len, "%s", ts+1);
+// 		fprintf(stderr, "IRI: (%d) <%s>\n", len, value);
+		rdf_term_t* term = triplestore_new_term(TERM_IRI, value, NULL, 0);
+		id = triplestore_get_term(t, term);
+		free(value);
+	} else if (ts[0] == '"') {
+		char* p	= strstr(ts+1, "\"");
+		int len	= p - ts;
+		char* value	= malloc(1 + len);
+		snprintf(value, len, "%s", ts+1);
+		rdf_term_t* term	= NULL;
+		if (p[1] == '^') {
+			p += 4;
+			char* q	= strstr(p, ">");
+			int len	= q - p + 1;
+			char* dt	= malloc(1 + len);
+			snprintf(dt, len, "%s", p);
+			rdf_term_t* dtterm = triplestore_new_term(TERM_IRI, dt, NULL, 0);
+			int64_t dtid = triplestore_get_term(t, dtterm);
+			term = triplestore_new_term(TERM_TYPED_LITERAL, value, NULL, dtid);
+			free(dt);
+		} else if (p[1] == '@') {
+			p += 2;
+			term = triplestore_new_term(TERM_LANG_LITERAL, value, p, 0);
+// 			char* s	= triplestore_term_to_string(t, term);
+// 			fprintf(stderr, "Term: %s\n", s);
+// 			free(s);
+		} else {
+			term = triplestore_new_term(TERM_XSDSTRING_LITERAL, value, NULL, 0);
+		}
+		
+		id = triplestore_get_term(t, term);
+// 		fprintf(stderr, "%"PRId64" Literal: (%d) \"%s\"\n", id, len, value);
+		free(value);
+	} else {
+		id	= _triplestore_query_get_variable_id(query, ts);
+		if (id == 0) {
+// 			id			= -(next_var++);
+// 				fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
+			char* p		= (char*) ts;
+			if (p[0] == '?') {
+				p++;
+			}
+			id	= triplestore_query_add_variable(query, p);
+// 			triplestore_ensure_variable_capacity(query, -id);
+// 			triplestore_query_set_variable_name(query, -id, ts);
+// 				bgp.variable_names[-id]		= calloc(1,2+strlen(ts));
+// 				sprintf(bgp.variable_names[-id], "?%s", ts);
+		}
+	}
+	
+	if (id == 0) {
+		fprintf(stderr, "Unrecognized term string %s\n", ts);
+	}
+	return id;
+}
+
 query_t* construct_bgp_query(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char** argv, int i) {
 	int triples		= (argc - i) / 3;
 	int variables	= 3 * triples;
-	int next_var	= 1;
-	query_t* query	= triplestore_new_query(t, variables);
+// 	int next_var	= 1;
+	query_t* query	= triplestore_new_query(t, 0);
 	bgp_t* bgp		= triplestore_new_bgp(t, variables, triples);
-	int j	= 0;
+	int j			= 0;
 	int64_t* ids	= calloc(sizeof(int64_t), variables);
 	while (i+1 < argc) {
 		int index			= j++;
 		const char* ts		= argv[++i];
-		int64_t id	= 0;
-		if (isdigit(ts[0])) {
-			id			= atoi(ts);
-		} else {
-			for (int j = 1; j <= variables; j++) {
-				if (query->variable_names[j]) {
-					if (!strcmp(query->variable_names[j], ts)) {
-						id	= -j;
-// 						fprintf(stderr, "Variable ?%s already assigned ID %"PRId64"\n", ts, id);
-						break;
-					}
-				}
-			}
-			if (id == 0) {
-				id			= -(next_var++);
-// 				fprintf(stderr, "Setting variable ?%s ID %"PRId64"\n", ts, id);
-				triplestore_query_set_variable_name(query, -id, ts);
-// 				bgp.variable_names[-id]		= calloc(1,2+strlen(ts));
-// 				sprintf(bgp.variable_names[-id], "?%s", ts);
-			}
-		}
+		int64_t id			= query_node_id(t, query, ts);
 		ids[index]	= id;
 	}
-	query->variables	= next_var - 1;
 	
 	for (j = 0; j < triples; j++) {
 		int64_t s	= ids[3*j + 0];
@@ -238,10 +300,8 @@ query_t* construct_bgp_query(triplestore_t* t, struct runtime_ctx_s* ctx, int ar
 
 int _triplestore_run_query(triplestore_t* t, query_t* query, struct runtime_ctx_s* ctx, FILE* f) {
 	if (ctx->verbose) {
-		fprintf(stderr, "------------------------\n");		
 		fprintf(stderr, "Matching Query:\n");
 		triplestore_print_query(t, query, stderr);
-		fprintf(stderr, "------------------------\n");		
 	}
 	double start	= triplestore_current_time();
 	__block int count	= 0;
@@ -265,20 +325,6 @@ int _triplestore_run_query(triplestore_t* t, query_t* query, struct runtime_ctx_
 		fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);
 	}
 	return 0;
-}
-
-int64_t _triplestore_query_get_variable_id(query_t* query, const char* var) {
-	int64_t v	= 0;
-	for (int x = 1; x <= query->variables; x++) {
-		if (!strcmp(var, query->variable_names[x])) {
-			v	= -x;
-			break;
-		}
-	}
-	if (v == 0) {
-		fprintf(stderr, "Unexpected variable ?%s\n", var);
-	}
-	return v;
 }
 
 int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char** argv) {
@@ -391,7 +437,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		}
 		query_t* query	= ctx->query;
 		int svars		= argc-i-1;
-		fprintf(stderr, "%d sort variables\n", svars);
+// 		fprintf(stderr, "%d sort variables\n", svars);
 		sort_t* sort	= triplestore_new_sort(t, query->variables, svars);
 		for (int j = 0; j < svars; j++) {
 			const char* var	= argv[j+i+1];
@@ -399,7 +445,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			if (v == 0) {
 				return 1;
 			}
-			fprintf(stderr, "setting sort variable #%d to ?%s (%"PRId64")\n", j, var, v);
+// 			fprintf(stderr, "setting sort variable #%d to ?%s (%"PRId64")\n", j, var, v);
 			triplestore_set_sort(sort, j, v);
 		}
 		triplestore_query_add_op(ctx->query, QUERY_SORT, sort);
@@ -535,10 +581,8 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "test")) {
 		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
 		if (ctx->verbose) {
-			fprintf(stderr, "------------------------\n");		
 			fprintf(stderr, "Matching Query:\n");
 			triplestore_print_query(t, query, stderr);
-			fprintf(stderr, "------------------------\n");		
 		}
 		
 		table_t* table	= triplestore_new_table(query->variables);
@@ -598,10 +642,8 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 // 		int64_t var			= strcmp(vs, "*") ? _triplestore_query_get_variable_id(query, vs) : 0;
 // 		int aggid			= triplestore_query_add_variable(query, ".agg");
 		if (ctx->verbose) {
-			fprintf(stderr, "------------------------\n");		
 			fprintf(stderr, "Matching Aggregate Query: (GROUP BY %s) %s %s\n", gs, op, vs);
 			triplestore_print_query(t, query, stderr);
-			fprintf(stderr, "------------------------\n");		
 		}
 		
 		double start		= triplestore_current_time();
@@ -683,7 +725,7 @@ int main (int argc, char** argv) {
 	char* linenoiseHistoryFile	= ".triplestore-history";
 	linenoiseHistoryLoad(linenoiseHistoryFile);
 
-	int interactive		= 0;
+// 	int interactive		= 0;
 	int max_edges		= 268435456; // 2^28
 	int max_nodes		= 268435456; // 2^28
 	triplestore_t* t	= new_triplestore(max_nodes, max_edges);
@@ -705,27 +747,32 @@ int main (int argc, char** argv) {
 			ctx.verbose++;
 		} else if (!strncmp(flag, "-p", 2)) {
 			ctx.print++;
-		} else if (!strncmp(flag, "-i", 2)) {
-			interactive	= 1;
-			ctx.print = 1;
+// 		} else if (!strncmp(flag, "-i", 2)) {
+// 			interactive	= 1;
+// 			ctx.print = 1;
 		}
 	}
 
 	if (i < argc) {
 		const char* filename	= argv[i++];
-		if (ctx.verbose) {
-			fprintf(stderr, "Importing %s\n", filename);
-		}
+		const char* suffix		= strstr(filename, ".db");
+		if (suffix && !strcmp(suffix, ".db")) {
+			triplestore_load(t, filename);
+		} else {
+			if (ctx.verbose) {
+				fprintf(stderr, "Importing %s\n", filename);
+			}
 	
-		triplestore__load_file(t, filename, ctx.print, ctx.verbose);
-		if (ctx.error) {
-			return 1;
+			triplestore__load_file(t, filename, ctx.print, ctx.verbose);
+			if (ctx.error) {
+				return 1;
+			}
 		}
 	}
 
 	triplestore_op(t, &ctx, argc-i, &(argv[i]));
 	
-	if (interactive) {
+// 	if (interactive) {
 		char* line;
 		while ((line = linenoise("sparql> ")) != NULL) {
 			char* argv[16];
@@ -748,7 +795,8 @@ int main (int argc, char** argv) {
 			free(buffer);
 		}
 		linenoiseHistorySave(linenoiseHistoryFile);
-	}
+// 	}
+// 	
 	
 	free_triplestore(t);
 	return 0;
