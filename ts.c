@@ -340,7 +340,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	int i	= 0;
 	FILE* f	= ctx->print ? stdout : NULL;
 	const char* op			= argv[i];
-	if (!strcmp(op, "")) {
+	if (!strcmp(op, "") || op[0] == '#') {
 	} else if (!strcmp(op, "help")) {
 		help(f);
 	} else if (!strcmp(op, "set")) {
