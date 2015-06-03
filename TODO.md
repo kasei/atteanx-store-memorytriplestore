@@ -1,13 +1,12 @@
 TODO
 ====
 
+* Ensure arguments are argument compatible for string filter functions.
 * Translate document-scoped bnode IDs to unique IDs on import
 * Perform simple lexical verification/canonicalization on input for known D-types (numerics, dates)
-* Implement count of triple/BGP matching, expose in XS (run BGP matching, but avoid materializing perl objects for results)
 * Implement simple filtering over BGP matching (1-variable SARGs plus simple 2-variable ops)
     * Numeric logical testing (var, const)
     * Date logical testing (var, const)
-    * CONTAINS (var, const)
     * LANGMATCHES (LANG(var), const)
 * Implement aggregates over BGP matching, with support for grouping by variable (but not complex expressions)
     * SUM
@@ -16,10 +15,10 @@ TODO
     * MAX
     * COUNT
 * Implement subset of property paths (does the obvious implementation correlate to the ALP algorithm?)
-    * `^p`
+    * `p*`
+    * `^p` (disregard; this can be avoided during planning)
     * `p/q`
     * `p|q`
-    * `p*`
     * `!p`
 * Add optional text indexing (map words to list of graph node IDs; specify participating predicates)
     * Optimize matching of BGPs when there is a filter which is subsumed by keyword matching (CONTAINS filters where the pattern contains at least one whole word)
@@ -28,6 +27,7 @@ TODO
 Done
 ====
 
+* Implement count of triple matching, expose in XS (run triple matching, but avoid materializing perl objects for results)
 * Generalize BGP matching to a query structure that can nest operations (BGPs, filters, aggregates, property paths)
 * Implement simple filtering over BGP matching (1-variable SARGs plus simple 2-variable ops)
     * ISIRI/ISLITERAL/ISBLANK (var)
@@ -35,6 +35,7 @@ Done
     * STRSTARTS (var, const)
     * STRENDS (var, const)
     * REGEX (var, const) (link with pcre; base on code in ts.c)
+    * CONTAINS (var, const)
 * Implement dump to/load from disk
     * Serialize term values AVL tree (simple loading code as it's guaranteed to be unique)
     * Dump edges array directly to disk (with int elements in network order)
