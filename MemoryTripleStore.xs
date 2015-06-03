@@ -177,6 +177,22 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 	}
 }
 
+int64_t _triplestore_query_get_variable_id(query_t* query, const char* var) {
+	int64_t v	= 0;
+	char* p		= (char*) var;
+	if (p[0] == '?') {
+		p++;
+	}
+	for (int x = 1; x <= query->variables; x++) {
+		if (!strcmp(p, query->variable_names[x])) {
+			v	= -x;
+			break;
+		}
+	}
+	return v;
+}
+
+
 void
 handle_new_triple_object (triplestore_t* t, SV* closure, rdf_term_t* subject, rdf_term_t* predicate, rdf_term_t* object) {
 	SV* s	= rdf_term_to_object(t, subject);
@@ -202,11 +218,13 @@ handle_new_result_object (triplestore_t* t, SV* closure, int variables, char** v
 	// fprintf(stderr, "constructing result from table:\n");
 	for (int j = 1; j <= variables; j++) {
 		nodeid_t id			= match[j];
-		// fprintf(stderr, "[%d]: %"PRIu32"\n", j, id);
-		rdf_term_t* term	= t->graph[id]._term;
-		SV* object			= rdf_term_to_object(t, term);
-		const char* key		= variable_names[j];
-		hv_store(hash, key, strlen(key), object, 0);
+		if (id > 0) {
+			// fprintf(stderr, "[%d]: %"PRIu32"\n", j, id);
+			rdf_term_t* term	= t->graph[id]._term;
+			SV* object			= rdf_term_to_object(t, term);
+			const char* key		= variable_names[j];
+			hv_store(hash, key, strlen(key), object, 0);
+		}
 	}
 	
 	SV* hashref	= newRV_inc((SV*) hash);
@@ -482,6 +500,142 @@ triplestore__count_triples(triplestore_t* t, IV s, IV p, IV o)
 	OUTPUT:
 		RETVAL
 
+void
+triplestore_print_query(triplestore_t* t, query_t* query)
+	CODE:
+		triplestore_print_query(t, query, stdout);
+
+
+MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::Query PREFIX = query_
+
+int
+query_build_struct (SV* self, triplestore_t* t)
+	PREINIT:
+		query_t *q;
+	CODE:
+		if (!(q = triplestore_new_query(t, 0))) {
+			croak("Failed to create new query");
+			RETVAL = 1;
+		} else {
+			xs_object_magic_attach_struct(aTHX_ SvRV(self), q);
+			RETVAL = 0;
+		}
+	OUTPUT:
+		RETVAL
+
+void
+query_DESTROY (query_t* query)
+	CODE:
+//		 fprintf(stderr, "destroying query: %p\n", query);
+	  triplestore_free_query(query);
+
+void
+query__evaluate(query_t* query, triplestore_t* t, SV* closure)
+	CODE:
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
+			return 0;
+		});
+
+int
+query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, char* pat, char* flags)
+	INIT:
+		int i, j, svars;
+		SV** svp;
+		char* ptr;
+		int64_t var;
+		query_filter_t* filter;
+	CODE:
+		var	= _triplestore_query_get_variable_id(query, var_name);
+		if (!strcmp(op, "starts")) {
+			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
+		} else if (!strcmp(op, "ends")) {
+			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
+		} else if (!strcmp(op, "contains")) {
+			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat);
+		} else if (!strncmp(op, "re", 2)) {
+			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, flags);
+		} else {
+			RETVAL = 1;
+			return;
+		}
+		RETVAL = triplestore_query_add_op(query, QUERY_FILTER, filter);
+	OUTPUT:
+		RETVAL	
+
+int
+query__add_project (query_t* query, triplestore_t* t, AV* names)
+	INIT:
+		int i, j, svars;
+		SV** svp;
+		char* ptr;
+	CODE:
+		project_t* project	= triplestore_new_project(t, query->variables);
+		svars	= 1 + av_top_index(names);
+		for (int j = 0; j < svars; j++) {
+			svp	= av_fetch(names, j, 0);
+			ptr = SvPV_nolen(*svp);
+			int64_t v	= _triplestore_query_get_variable_id(query, ptr);
+			if (v == 0) {
+				RETVAL = 1;
+				return;
+			}
+			triplestore_set_projection(project, v);
+		}
+		RETVAL = triplestore_query_add_op(query, QUERY_PROJECT, project);
+	OUTPUT:
+		RETVAL	
+
+int
+query__add_sort (query_t* query, triplestore_t* t, AV* names)
+	INIT:
+		int i, j, svars;
+		SV** svp;
+		char* ptr;
+	CODE:
+		svars	= 1 + av_top_index(names);
+		sort_t* sort	= triplestore_new_sort(t, query->variables, svars);
+		for (int j = 0; j < svars; j++) {
+			svp	= av_fetch(names, j, 0);
+			ptr = SvPV_nolen(*svp);
+			int64_t v	= _triplestore_query_get_variable_id(query, ptr);
+			if (v == 0) {
+				RETVAL = 1;
+				return;
+			}
+			triplestore_set_sort(sort, j, v);
+		}
+		RETVAL = triplestore_query_add_op(query, QUERY_SORT, sort);
+	OUTPUT:
+		RETVAL	
+
+void
+query__add_bgp (query_t* query, triplestore_t* t, IV triples, IV variables, AV* ids, AV* names)
+	INIT:
+		int i;
+		SV** svp;
+		char* ptr;
+		bgp_t* bgp;
+		IV iv;
+	CODE:
+		bgp = triplestore_new_bgp(t, variables, triples);
+		for (i = 1; i <= variables; i++) {
+			svp	= av_fetch(names, i, 0);
+			ptr = SvPV_nolen(*svp);
+			triplestore_ensure_variable_capacity(query, i);
+			triplestore_query_set_variable_name(query, i, ptr);
+		}
+		for (i = 0; i < triples; i++) {
+			SV **svs, **svp, **svo;
+			svs			= av_fetch(ids, 3*i+0, 0);
+			svp			= av_fetch(ids, 3*i+1, 0);
+			svo			= av_fetch(ids, 3*i+2, 0);
+			int64_t s	= (int64_t) SvIV(*svs);
+			int64_t p	= (int64_t) SvIV(*svp);
+			int64_t o	= (int64_t) SvIV(*svo);
+			triplestore_bgp_set_triple_nodes(bgp, i, s, p, o);
+		}
+		triplestore_query_add_op(query, QUERY_BGP, bgp);
 
 
 MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripleStore::IRI PREFIX = rdf_term_iri_

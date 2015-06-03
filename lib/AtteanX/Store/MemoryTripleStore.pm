@@ -51,6 +51,7 @@ package AtteanX::Store::MemoryTripleStore {
 		XSLoader::load('AtteanX::Store::MemoryTripleStore', $VERSION);
 	}
 
+	use AtteanX::Store::MemoryTripleStore::Query;
 	use AtteanX::Store::MemoryTripleStore::IRI;
 	use AtteanX::Store::MemoryTripleStore::Blank;
 	with 'Attean::API::TripleStore';
@@ -113,6 +114,7 @@ containing a set of possible term values.
 			} else {
 				my $id		= $self->_id_from_term($n);
 				unless ($id) {
+# 					warn 'term does not exist in the store: ' . $n->as_string;
 					# term does not exist in the store
 					return;
 				}
@@ -175,6 +177,7 @@ variable bindings which match the specified L<Attean::API::TriplePattern>s.
 				} else {
 					my $id		= $self->_id_from_term($term);
 					unless ($id) {
+# 						warn 'term does not exist in the store: ' . $term->as_string;
 						# term does not exist in the store
 						return;
 					}
@@ -260,6 +263,7 @@ variable bindings which match the specified L<Attean::API::TriplePattern>s.
 				my $id		= $self->_id_from_term($term);
 				unless ($id) {
 					# term does not exist in the store
+# 					warn 'term does not exist in the store: ' . $term->as_string;
 					return Attean::ListIterator->new(values => [], item_type => 'Attean::API::Triple');
 				}
 				push(@ids, $id);
