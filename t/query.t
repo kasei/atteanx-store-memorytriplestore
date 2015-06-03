@@ -13,6 +13,7 @@ use AtteanX::RDFQueryTranslator;
 use RDF::Query;
 use FindBin qw($Bin);
 use File::Spec;
+use Data::Dumper;
 
 sub create_store {
 	my $self	= shift;
@@ -25,17 +26,21 @@ test 'simple query construction' => sub {
 	my $self	= shift;
 	my $store	= $self->create_store();
 	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
 	
 	my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $store);
 	isa_ok($query, 'AtteanX::Store::MemoryTripleStore::Query');
 
 	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://data.smgov.net/resource/zzzz-zzzz/commonname'), variable('tree'));
 	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
-	$query->add_bgp($bgp);
+	$query->add_bgp(@{ $bgp->triples });
+	my $iter	= $query->evaluate($model);
+	does_ok($iter, 'Attean::API::ResultIterator');
+
 	my $count	= 0;
-	$query->evaluate(sub {
+	while (my $result = $iter->next) {
 		$count++;
-	});
+	}
 	is($count, 55);
 };
 
@@ -43,22 +48,24 @@ test 'filter query construction' => sub {
 	my $self	= shift;
 	my $store	= $self->create_store();
 	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
 	
 	my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $store);
 	isa_ok($query, 'AtteanX::Store::MemoryTripleStore::Query');
 
 	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://data.smgov.net/resource/zzzz-zzzz/commonname'), variable('tree'));
 	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
-	$query->add_bgp($bgp);
+	$query->add_bgp(@{ $bgp->triples });
 	$query->add_filter('tree', 'contains', 'PEPPER');
+	my $iter	= $query->evaluate($model);
+	does_ok($iter, 'Attean::API::ResultIterator');
+	
 	my %seen;
-	$query->evaluate(sub {
-		my $hash	= shift;
-		my $result	= Attean::Result->new( bindings => $hash );
+	while (my $result = $iter->next) {
 		my $tree	= $result->value('tree');
 		does_ok($tree, 'Attean::API::Literal');
 		$seen{$tree->value}++;
-	});
+	}
 	is_deeply(\%seen, {
 		'PEPPERMINT TREE'	=> 1,
 		'BRAZILIAN PEPPER'	=> 4,
@@ -69,6 +76,7 @@ test 'complex query construction' => sub {
 	my $self	= shift;
 	my $store	= $self->create_store();
 	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
 	
 	my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $store);
 	isa_ok($query, 'AtteanX::Store::MemoryTripleStore::Query');
@@ -76,18 +84,19 @@ test 'complex query construction' => sub {
 	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://data.smgov.net/resource/zzzz-zzzz/fullname'), variable('street'));
 	my $t2		= Attean::TriplePattern->new(variable('s'), iri('http://data.smgov.net/resource/zzzz-zzzz/commonname'), variable('tree'));
 	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1, $t2]);
-	$query->add_bgp($bgp);
+	$query->add_bgp(@{ $bgp->triples });
 	$query->add_filter('tree', 'regex', 'palm', 'i');
 	$query->add_project(qw(street tree));
 	$query->add_sort(qw(street tree));
+	
 	my $count	= 0;
 	my $seen_euclid	= 0;
-	$query->evaluate(sub {
+	my $iter	= $query->evaluate($model);
+	does_ok($iter, 'Attean::API::ResultIterator');
+	while (my $result = $iter->next) {
 		$count++;
-		my $hash	= shift;
-		my @keys	= keys %$hash;
+		my @keys	= $result->variables;
 		is_deeply([sort @keys], [qw(street tree)], 'expected bindings after projection');
-		my $result	= Attean::Result->new( bindings => $hash );
 		my $street	= $result->value('street');
 		does_ok($street, 'Attean::API::Literal');
 		
@@ -105,7 +114,7 @@ test 'complex query construction' => sub {
 		does_ok($tree, 'Attean::API::Literal');
 		like($tree->value, qr/PALM/i);
 # 		say $result->as_string;
-	});
+	}
 	is($count, 12);
 };
 

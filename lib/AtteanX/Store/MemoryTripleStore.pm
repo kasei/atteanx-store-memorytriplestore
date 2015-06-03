@@ -148,97 +148,18 @@ containing a set of possible term values.
 		return $self->_count_triples(@ids);
 	}
 	
-=item C<< match_bgp ( @triples ) >>
-
-Returns an iterator object of all L<Attean::API::Result> objects representing
-variable bindings which match the specified L<Attean::API::TriplePattern>s.
-
-=cut
-
-	sub _bgp_ids {
-		my $self	= shift;
-		my $f		= shift;
-		my @ids;
-		my $last	= 0;
-		my %vars;
-		my @names	= ('');
-		my $triple_count	= scalar(@_);
-		foreach my $triple (@_) {
-			foreach my $term ($triple->values) {
-				if ($term->does('Attean::API::Variable')) {
-					if (exists $vars{$term->value}) {
-						push(@ids, $vars{$term->value});
-					} else {
-						my $id	= ++$last;
-						$names[$id]	= $term->value;
-						$vars{$term->value}	= -$id;
-						push(@ids, -$id);
-					}
-				} else {
-					my $id		= $self->_id_from_term($term);
-					unless ($id) {
-# 						warn 'term does not exist in the store: ' . $term->as_string;
-						# term does not exist in the store
-						return;
-					}
-					push(@ids, $id);
-				}
-			}
-		}
-
-		foreach my $i (0 .. $#{ $f }) {
-			if (ref($f->[$i])) {
-				foreach my $k (keys %{ $f->[$i] }) {
-					my $v	= $f->[$i]{$k};
-					if (blessed($v)) {
-						if ($v->does('Attean::API::Variable')) {
-							$f->[$i]{$k}	= $vars{$v->value};
-						} elsif ($v->does('Attean::API::Literal')) {
-							$f->[$i]{$k}	= $v->value;
-						} else {
-							Carp::cluck "Unexpected object in filter planning: " . Dumper($v);
-						}
-					}
-				}
-			}
-		}
-		
-		my $bgp	= {
-			triples			=> $triple_count,
-			variables		=> $last,
-			nodes			=> \@ids,
-			variable_names	=> \@names,
-			filters			=> $f,
-		};
-
-		return $bgp;
-	}
-	
-	sub match_bgp_with_filters {
-		my $self	= shift;
-		my $bgp		= $self->_bgp_ids(@_);
-		unless (ref($bgp)) {
-			return Attean::ListIterator->new(values => [], item_type => 'Attean::API::Triple');
-		}
-		my @results;
-		$self->match_bgp_with_filter_cb(
-			$bgp->{triples},
-			$bgp->{variables},
-			$bgp->{nodes},
-			$bgp->{variable_names},
-			$bgp->{filters},
-			sub {
-				my $hash	= shift;
-				my $result	= Attean::Result->new( bindings => $hash );
-				push(@results, $result);
-			}
-		);
-		return Attean::ListIterator->new(values => \@results, item_type => 'Attean::API::Result');
-	}
-	
 	sub match_bgp {
 		my $self	= shift;
-		return $self->match_bgp_with_filters([], @_);
+		my @triples	= @_;
+		my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $self);
+		$query->add_bgp(@triples);
+		my @results;
+		$query->_evaluate($self, sub {
+			my $hash	= shift;
+			my $result	= Attean::Result->new( bindings => $hash );
+			push(@results, $result);
+		});
+		return Attean::ListIterator->new(values => \@results, item_type => 'Attean::API::Result');
 	}
 	
 	sub match_path {
@@ -358,38 +279,34 @@ Otherwise, returns an empty list.
 
 =cut
 
-	sub _data_for_plannable_algebra {
+	sub _query_for_plannable_algebra {
 		my $self	= shift;
 		my $algebra	= shift;
+		return unless blessed($algebra);
 		if ($algebra->isa('Attean::Algebra::BGP')) {
 			my @triples	= $self->_ordered_triples_from_bgp($algebra);
-			return { triples => \@triples, filters => [] };
+			my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $self);
+			$query->add_bgp(@triples);
+			return $query;
 		} else {
 			my ($child)	= @{ $algebra->children };
-			if (my $data = $self->_data_for_plannable_algebra($child)) {
+			if (my $query = $self->_query_for_plannable_algebra($child)) {
 				if ($algebra->isa('Attean::Algebra::Filter')) {
 					my $expr	= $algebra->expression;
 					my $s		= $expr->as_string;
-					my $ok		= 0;
 					if ($s =~ /^REGEX\([?]\w+, "[^"]+"\)$/) {
-						$ok	= 1;
 						my $var		= $expr->children->[0]->value;
 						my $pattern	= $expr->children->[1]->value;
 						my $flags	= ''; # TODO: add flags support
-						push(@{ $data->{filters} }, FILTER_REGEX, {variable => $var, pattern => $pattern, flags => $flags});
+						$query->add_filter($var->value, 'regex', $pattern->value, $flags);
+						return $query;
 					} elsif ($s =~ /^IS(IRI|URI|LITERAL|BLANK)\([?]\w+\)$/) {
 						my $var		= $expr->children->[0]->value;
-						my $type;
-						if ($s =~ /IRI|URI/) {
-							$type	= FILTER_ISIRI;
-						} elsif ($s =~ /LITERAL/) {
-							$type	= FILTER_ISLITERAL;
-						} elsif ($s =~ /BLANK/) {
-							$type	= FILTER_ISBLANK;
-						}
-						push(@{ $data->{filters} }, $type, {variable => $var});
-						$ok	= 1;
+						my $op		= lc($expr->operator);
+						$query->add_filter($var->value, $op);
+						return $query;
 					} elsif ($s =~ /^(?:CONTAINS|STRSTARTS|STRENDS)\([?]\w+, "[^"]+"\)$/) {
+						my $op		= lc($expr->operator);
 						my $var		= $expr->children->[0]->value;
 						my $pattern	= $expr->children->[1]->value;
 						my $type;
@@ -400,15 +317,8 @@ Otherwise, returns an empty list.
 						} elsif ($s =~ /ENDS/) {
 							$type	= FILTER_STRENDS;
 						}
-						push(@{ $data->{filters} }, $type, {variable => $var, pattern => $pattern});
-						$ok	= 1;
-					}
-					
-					if ($ok) {
-# 						warn "=========\nAlgebra is plannable:\n" . $algebra->as_string . "\n-------\n";
-# 						use Data::Dumper;
-# 						warn Dumper($data);
-						return $data;
+						$query->add_filter($var->value, $op, $pattern->value);
+						return $query;
 					}
 				}
 			}
@@ -420,17 +330,11 @@ Otherwise, returns an empty list.
 		my $self	= shift;
 		my $algebra	= shift;
 		
-		if ($algebra->isa('Attean::Algebra::Filter')) {
-			if (my $data = $self->_data_for_plannable_algebra($algebra)) {
-				return AtteanX::Store::MemoryTripleStore::FilteredBGPPlan->new(
-					%$data,
-					store		=> $self,
-					distinct	=> 0,
-					in_scope_variables	=> [ $algebra->in_scope_variables ],
-					ordered	=> [],
-				);
-			}
-		} elsif ($algebra->isa('Attean::Algebra::Path')) {
+		if (my $query = $self->_query_for_plannable_algebra($algebra)) {
+			return $query;
+		}
+		
+		if ($algebra->isa('Attean::Algebra::Path')) {
 			my $s		= $algebra->subject;
 			my $o		= $algebra->object;
 			my $path	= $algebra->path;
@@ -453,15 +357,6 @@ Otherwise, returns an empty list.
 				}
 			}
 			return;
-		} elsif ($algebra->isa('Attean::Algebra::BGP')) {
-			my @triples	= $self->_ordered_triples_from_bgp($algebra);
-			return AtteanX::Store::MemoryTripleStore::BGPPlan->new(
-				triples 	=> \@triples,
-				store		=> $self,
-				distinct	=> 0,
-				in_scope_variables	=> [ $algebra->in_scope_variables ],
-				ordered	=> [],
-			);
 		}
 		return;
 	}
@@ -478,7 +373,7 @@ Otherwise returns C<undef>.
 	sub cost_for_plan {
 		my $self	= shift;
 		my $plan	= shift;
-		if ($plan->isa('AtteanX::Store::MemoryTripleStore::BGPPlan')) {
+		if ($plan->isa('AtteanX::Store::MemoryTripleStore::Query')) {
 			return 1; # TODO: actually estimate cost here
 		}
 		return;
@@ -510,60 +405,6 @@ package AtteanX::Store::MemoryTripleStore::PathPlan 0.001 {
 		my $type	= $self->type;
 		return sub {
 			return $store->match_path($type, $s, $p, $o);
-		}
-	}
-}
-
-package AtteanX::Store::MemoryTripleStore::BGPPlan 0.001 {
-	use Moo;
-	use Types::Standard qw(ConsumerOf ArrayRef InstanceOf);
-	with 'Attean::API::Plan', 'Attean::API::NullaryQueryTree';
-	has 'triples' => (is => 'ro',  isa => ArrayRef[ConsumerOf['Attean::API::TriplePattern']], default => sub { [] });
-	has 'store' => (is => 'ro', isa => InstanceOf['AtteanX::Store::MemoryTripleStore'], required => 1);
-	sub plan_as_string {
-		return 'MemoryTripleStoreBGP'
-	}
-	
-	sub impl {
-		my $self	= shift;
-		my $model	= shift;
-		my $store	= $self->store;
-		my @triples	= @{ $self->triples };
-		return sub {
-			return $store->match_bgp(@triples);
-		}
-	}
-}
-
-package AtteanX::Store::MemoryTripleStore::FilteredBGPPlan 0.001 {
-	use Moo;
-	use Types::Standard qw(Str ConsumerOf ArrayRef InstanceOf);
-	has 'filters' => (is => 'ro', isa => ArrayRef, required => 1);
-	extends 'AtteanX::Store::MemoryTripleStore::BGPPlan';
-	
-	sub filter_count {
-		my $self	= shift;
-		my $f		= $self->filters;
-		my $count	= scalar(@$f) / 2;
-		return $count;
-	}
-	
-	sub plan_as_string {
-		my $self	= shift;
-		my $model	= shift;
-		my $count	= $self->filter_count;
-		
-		return sprintf('MemoryTripleStoreBGP (%d filters)', $count);
-	}
-
-	sub impl {
-		my $self	= shift;
-		my $model	= shift;
-		my $store	= $self->store;
-		my $f		= $self->filters;
-		my @triples	= @{ $self->triples };
-		return sub {
-			return $store->match_bgp_with_filters($f, @triples);
 		}
 	}
 }

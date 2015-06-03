@@ -547,7 +547,13 @@ query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, c
 		query_filter_t* filter;
 	CODE:
 		var	= _triplestore_query_get_variable_id(query, var_name);
-		if (!strcmp(op, "starts")) {
+		if (!strcmp(op, "isiri")) {
+			filter	= triplestore_new_filter(FILTER_ISIRI, var);
+		} else if (!strcmp(op, "isblank")) {
+			filter	= triplestore_new_filter(FILTER_ISBLANK, var);
+		} else if (!strcmp(op, "isliteral")) {
+			filter	= triplestore_new_filter(FILTER_ISLITERAL, var);
+		} else if (!strcmp(op, "starts")) {
 			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
 		} else if (!strcmp(op, "ends")) {
 			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);

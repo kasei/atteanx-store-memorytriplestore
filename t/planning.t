@@ -92,9 +92,10 @@ test 'store-planning for BGP REGEX filter' => sub {
 	my $expr	= Attean::FunctionExpression->new( children => [$var, $pattern], operator => 'regex' );
 	my $filter	= Attean::Algebra::Filter->new(children => [$bgp], expression => $expr);
 	my $plan	= $planner->plan_for_algebra($filter, $model, [$graph]);
-	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::FilteredBGPPlan');
+	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::Query');
 	
-	my $iter	= $plan->evaluate();
+	my $iter	= $plan->evaluate($model);
+	does_ok($iter, 'Attean::API::ResultIterator');
 	my $count	= 0;
 	while (my $r = $iter->next) {
 		$count++;
@@ -121,9 +122,7 @@ test 'store-planning for BGP type+REGEX filter' => sub {
 	my $expr2	= Attean::FunctionExpression->new( children => [$var, $pattern], operator => 'regex' );
 	my $filter2	= Attean::Algebra::Filter->new(children => [$filter1], expression => $expr2);
 	my $plan	= $planner->plan_for_algebra($filter2, $model, [$graph]);
-	
-	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::FilteredBGPPlan');
-	is($plan->filter_count, 2, 'Store-provided plan represents both filters');
+	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::Query');
 	
 	my $iter	= $plan->evaluate();
 	my $count	= 0;
@@ -152,8 +151,7 @@ test 'store-planning for BGP string filter' => sub {
 
 	my $plan	= $planner->plan_for_algebra($filter, $model, [$graph]);
 	
-	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::FilteredBGPPlan');
-	is($plan->filter_count, 1, 'Store-provided plan represents both filters');
+	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::Query');
 	
 	my $iter	= $plan->evaluate();
 	my $count	= 0;
