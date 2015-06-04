@@ -1,13 +1,16 @@
 LDLIBS	= -lraptor2 -lpcre
-CFLAGS	= -std=c11 -fblocks -g -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2
-# CFLAGS	= -fblocks -O3 -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2
+CFLAGS	= -fblocks -g -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+	LDLIBS += -lBlocksRuntime
+endif
+ifeq ($(UNAME_S),Darwin)
+	CFLAGS += -std=c11
+endif
 
 CC		= clang
 
 %.o: %.h %.c
-
-#import: import.c
-#	$(CC) $(CFLAGS) $(LDLIBS) import.c -o import
 
 ts: ts.c triplestore.o avl.o linenoise.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o

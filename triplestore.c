@@ -44,11 +44,11 @@ double triplestore_elapsed_time ( double start ) {
 	return elapsed;
 }
 
-static void __indent(FILE* f, int depth) {
-	for (int x = 0; x < depth; x++) {
-		fprintf(f, "\t");
-	}
-}
+// static void __indent(FILE* f, int depth) {
+// 	for (int x = 0; x < depth; x++) {
+// 		fprintf(f, "\t");
+// 	}
+// }
 
 #pragma mark -
 #pragma mark RDF Terms
@@ -490,13 +490,13 @@ struct _sort_s {
 	sort_t* sort;
 };
 
-static void _print_row(const char* head, FILE* f, uint32_t* row, int width) {
-	fprintf(stderr, "%s:", head);
-	for (int i = 1; i <= width; i++) {
-		fprintf(stderr, " %"PRIu32"", row[i]);
-	}
-	fprintf(stderr, "\n");
-}
+// static void _print_row(const char* head, FILE* f, uint32_t* row, int width) {
+// 	fprintf(stderr, "%s:", head);
+// 	for (int i = 1; i <= width; i++) {
+// 		fprintf(stderr, " %"PRIu32"", row[i]);
+// 	}
+// 	fprintf(stderr, "\n");
+// }
 
 #ifdef __APPLE__
 int _table_row_cmp(void* thunk, const void* a, const void* b) {

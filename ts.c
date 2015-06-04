@@ -776,8 +776,8 @@ int main (int argc, char** argv) {
 	linenoiseHistoryLoad(linenoiseHistoryFile);
 
 // 	int interactive		= 0;
-	int max_edges		= 268435456; // 2^28
-	int max_nodes		= 268435456; // 2^28
+	int max_edges		= 65536;
+	int max_nodes		= 65536;
 	triplestore_t* t	= new_triplestore(max_nodes, max_edges);
 
 	__block struct runtime_ctx_s ctx	= {
