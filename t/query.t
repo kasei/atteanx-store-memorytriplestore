@@ -72,6 +72,36 @@ test 'filter query construction' => sub {
 	});
 };
 
+test 'filter+project+unique query construction' => sub {
+	my $self	= shift;
+	my $store	= $self->create_store();
+	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
+	
+	my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $store);
+	isa_ok($query, 'AtteanX::Store::MemoryTripleStore::Query');
+
+	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://data.smgov.net/resource/zzzz-zzzz/commonname'), variable('tree'));
+	my $bgp		= Attean::Algebra::BGP->new(triples => [$t1]);
+	$query->add_bgp(@{ $bgp->triples });
+	$query->add_filter('tree', 'contains', 'PEPPER');
+	$query->add_project('tree');
+	$query->add_unique();
+	my $iter	= $query->evaluate($model);
+	does_ok($iter, 'Attean::API::ResultIterator');
+	
+	my %seen;
+	while (my $result = $iter->next) {
+		my $tree	= $result->value('tree');
+		does_ok($tree, 'Attean::API::Literal');
+		$seen{$tree->value}++;
+	}
+	is_deeply(\%seen, {
+		'PEPPERMINT TREE'	=> 1,
+		'BRAZILIAN PEPPER'	=> 1,
+	});
+};
+
 test 'complex query construction' => sub {
 	my $self	= shift;
 	my $store	= $self->create_store();

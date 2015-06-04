@@ -477,14 +477,14 @@ query__add_project (query_t* query, triplestore_t* t, AV* names)
 		RETVAL	
 
 int
-query__add_sort (query_t* query, triplestore_t* t, AV* names)
+query__add_sort (query_t* query, triplestore_t* t, AV* names, int unique)
 	INIT:
 		int i, j, svars;
 		SV** svp;
 		char* ptr;
 	CODE:
 		svars	= 1 + av_top_index(names);
-		sort_t* sort	= triplestore_new_sort(t, query->variables, svars, 0);
+		sort_t* sort	= triplestore_new_sort(t, query->variables, svars, unique);
 		for (int j = 0; j < svars; j++) {
 			svp	= av_fetch(names, j, 0);
 			ptr = SvPV_nolen(*svp);

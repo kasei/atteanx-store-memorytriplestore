@@ -87,7 +87,7 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 	sub add_project {
 		my $self	= shift;
 		my @names	= @_;
-		@{ $self->in_scope_variables }	= [@names];
+		@{ $self->in_scope_variables }	= @names;
 		return $self->_add_project($self->store, \@names);
 	}
 	
@@ -103,7 +103,22 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 		}
 		@{ $self->ordered }	= @cmps;
 		
-		return $self->_add_sort($self->store, \@names);
+		return $self->_add_sort($self->store, \@names, 0);
+	}
+	
+	sub add_unique {
+		my $self	= shift;
+		my @names	= @{ $self->in_scope_variables };
+		
+		my @cmps;
+		foreach my $var (@names) {
+			my $expr	= Attean::ValueExpression->new(value => variable($var));
+			my $cmp		= Attean::Algebra::Comparator->new(ascending => 1, expression => $expr);
+			push(@cmps, $cmp);
+		}
+		@{ $self->ordered }	= @cmps;
+		
+		return $self->_add_sort($self->store, \@names, 1);
 	}
 	
 	sub add_filter {
@@ -123,7 +138,11 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 		unless (ref($bgp)) {
 			return;
 		}
-		my @results;
+		
+		my @names	= @{ $bgp->{variable_names} };
+		shift(@names);	# get rid of the leading empty string
+		@{ $self->in_scope_variables }	= @names;
+		
 		$self->_add_bgp(
 			$self->store,
 			$bgp->{triples},
