@@ -251,6 +251,7 @@ BOOT:
 	EXPORT_FLAG(FILTER_ISIRI);
 	EXPORT_FLAG(FILTER_ISLITERAL);
 	EXPORT_FLAG(FILTER_ISBLANK);
+	EXPORT_FLAG(FILTER_ISNUMERIC);
 	EXPORT_FLAG(FILTER_SAMETERM);
 	EXPORT_FLAG(FILTER_REGEX);
 	EXPORT_FLAG(FILTER_LANGMATCHES);
@@ -437,6 +438,8 @@ query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, c
 			filter	= triplestore_new_filter(FILTER_ISBLANK, var);
 		} else if (!strcmp(op, "isliteral")) {
 			filter	= triplestore_new_filter(FILTER_ISLITERAL, var);
+		} else if (!strcmp(op, "isnumeric")) {
+			filter	= triplestore_new_filter(FILTER_ISNUMERIC, var);
 		} else if (!strcmp(op, "starts")) {
 			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
 		} else if (!strcmp(op, "ends")) {

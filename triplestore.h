@@ -33,6 +33,7 @@ typedef enum {
 	FILTER_ISIRI = 1,	// ISIRI(?var)
 	FILTER_ISLITERAL,	// ISLITERAL(?var)
 	FILTER_ISBLANK,		// ISBLANK(?var)
+	FILTER_ISNUMERIC,	// ISNUMERIC(?var)
 	FILTER_SAMETERM,	// SAMETERM(?var, CONST) or SAMETERM(?var, ?var)
 	FILTER_REGEX,		// REGEX(?var, "string", "flags")
 	FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")

@@ -573,7 +573,7 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 	va_start(ap, type);
 	query_filter_t* filter	= calloc(1, sizeof(query_filter_t));
 	filter->type	= type;
-	if (type == FILTER_ISIRI || type == FILTER_ISLITERAL || type == FILTER_ISBLANK) {
+	if (type == FILTER_ISIRI || type == FILTER_ISLITERAL || type == FILTER_ISBLANK || type == FILTER_ISNUMERIC) {
 		int64_t id		= va_arg(ap, int64_t);
 		filter->node1	= id;
 	} else if (type == FILTER_SAMETERM) {
@@ -645,6 +645,7 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 	int64_t node2;
 	int rc;
 	rdf_term_t* term;
+	char* dt;
 	int OVECCOUNT	= 30;
 	int ovector[OVECCOUNT];
 	switch (filter->type) {
@@ -661,6 +662,11 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 			break;
 		case FILTER_ISBLANK:
 			if (t->graph[ current_match[-(filter->node1)] ]._term->type != TERM_BLANK) {
+				return 0;
+			}
+			break;
+		case FILTER_ISNUMERIC:
+			if (!(t->graph[ current_match[-(filter->node1)] ]._term->is_numeric)) {
 				return 0;
 			}
 			break;
@@ -1122,6 +1128,7 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
 	free(current_match);
 	
+	// go through the operation sequence and re-start flow of results from any materialized tables
 	while (1) {
 		if (!op) break;
 		if (op->type == QUERY_SORT) {

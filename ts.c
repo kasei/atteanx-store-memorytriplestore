@@ -483,7 +483,6 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "filter")) {
 		const char* op	= argv[++i];
 		const char* vs	= argv[++i];
-		const char* pat	= argv[++i];
 		query_t* query;
 		if (ctx->constructing) {
 			query	= ctx->query;
@@ -497,16 +496,31 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		}
 		
 		query_filter_t* filter;
-		if (!strcmp(op, "starts")) {
-			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
-		} else if (!strcmp(op, "ends")) {
-			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
-		} else if (!strcmp(op, "contains")) {
-			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat);
-		} else if (!strncmp(op, "re", 2)) {
-			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, "i");
+		if (!strncmp(op, "is", 2)) {
+			if (!strcmp(op, "isiri")) {
+				filter	= triplestore_new_filter(FILTER_ISIRI, var);
+			} else if (!strcmp(op, "isliteral")) {
+				filter	= triplestore_new_filter(FILTER_ISLITERAL, var);
+			} else if (!strcmp(op, "isblank")) {
+				filter	= triplestore_new_filter(FILTER_ISBLANK, var);
+			} else if (!strcmp(op, "isnumeric")) {
+				filter	= triplestore_new_filter(FILTER_ISNUMERIC, var);
+			} else {
+				return 1;
+			}
 		} else {
-			return 1;
+			const char* pat	= argv[++i];
+			if (!strcmp(op, "starts")) {
+				filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
+			} else if (!strcmp(op, "ends")) {
+				filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
+			} else if (!strcmp(op, "contains")) {
+				filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat);
+			} else if (!strncmp(op, "re", 2)) {
+				filter	= triplestore_new_filter(FILTER_REGEX, var, pat, "i");
+			} else {
+				return 1;
+			}
 		}
 		
 		if (ctx->constructing) {
