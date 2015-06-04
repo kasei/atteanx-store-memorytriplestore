@@ -57,6 +57,8 @@ typedef struct rdf_term_s {
 		uint32_t value_id;
 		char* value_type;
 	} vtype;
+	int is_numeric;
+	double numeric_value;
 } rdf_term_t;
 
 typedef struct index_list_element_s {
@@ -110,6 +112,7 @@ typedef struct project_s {
 
 typedef struct sort_s {
 	int size;
+	int unique;
 	int64_t* vars;
 	table_t* table;
 } sort_t;
@@ -140,7 +143,7 @@ typedef struct triplestore_s {
 double triplestore_current_time ( void );
 double triplestore_elapsed_time ( double start );
 
-rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype, nodeid_t vid );
+rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid);
 void free_rdf_term(rdf_term_t* t);
 int triplestore_size(triplestore_t* t);
 
@@ -190,7 +193,7 @@ int triplestore_free_filter(query_filter_t* filter);
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
 
 // Sorting
-sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables);
+sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, int unique);
 int triplestore_free_sort(sort_t* sort);
 int triplestore_set_sort(sort_t* sort, int rank, int64_t var);
 

@@ -52,20 +52,20 @@ static void __indent(FILE* f, int depth) {
 #pragma mark -
 #pragma mark RDF Terms
 
-rdf_term_t* triplestore_new_term( rdf_term_type_t type, char* value, char* vtype, nodeid_t vid ) {
-	rdf_term_t* t	= calloc(sizeof(rdf_term_t), 1);
-	t->type			= type;
-	t->value		= calloc(1, 1+strlen(value));
-	strcpy(t->value, value);
+rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
+	rdf_term_t* term	= calloc(sizeof(rdf_term_t), 1);
+	term->type			= type;
+	term->value			= calloc(1, 1+strlen(value));
+	strcpy(term->value, value);
 	
 	if (vtype) {
-		t->vtype.value_type	= calloc(1, 1+strlen(vtype));
-		strcpy(t->vtype.value_type, vtype);
+		term->vtype.value_type	= calloc(1, 1+strlen(vtype));
+		strcpy(term->vtype.value_type, vtype);
 	} else {
-		t->vtype.value_id	= vid;
+		term->vtype.value_id	= vid;
 	}
 	
-	return t;
+	return term;
 }
 
 void free_rdf_term(rdf_term_t* t) {
@@ -255,7 +255,7 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	return 0;
 }
 
-static rdf_term_t* _readterm(int fd) {
+static rdf_term_t* _readterm(triplestore_t* t, int fd) {
 	char buffer[12];
 	read(fd, buffer, 12);
 	rdf_term_type_t type	= (rdf_term_type_t) ntohl(*((uint32_t*) &(buffer[0])));
@@ -272,7 +272,7 @@ static rdf_term_t* _readterm(int fd) {
 	} else if (type == TERM_TYPED_LITERAL) {
 		value_id	= extra_int;
 	}
-	return triplestore_new_term(type, value, value_type, value_id);
+	return triplestore_new_term(t, type, value, value_type, value_id);
 }
 
 int _triplestore_dump_edge(int fd, index_list_element_t* edge) {
@@ -298,7 +298,7 @@ int _triplestore_dump_node(int fd, graph_node_t* node) {
 	return 0;
 }
 
-int _triplestore_load_node(int fd, int i, graph_node_t* node) {
+int _triplestore_load_node(triplestore_t* t, int fd, int i, graph_node_t* node) {
 	char buffer[24];
 	read(fd, buffer, 24);
 	node->mtime			= *((uint64_t*) &(buffer[0]));
@@ -306,7 +306,7 @@ int _triplestore_load_node(int fd, int i, graph_node_t* node) {
 	node->in_degree		= ntohl(*((uint32_t*) &(buffer[12])));
 	node->out_edge_head	= ntohl(*((uint32_t*) &(buffer[16])));
 	node->in_edge_head	= ntohl(*((uint32_t*) &(buffer[20])));
-	node->_term			= _readterm(fd);
+	node->_term			= _readterm(t, fd);
 	return 0;
 }
 
@@ -371,7 +371,7 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 	t->graph				= calloc(sizeof(graph_node_t), 1+nodes);
 	for (uint32_t i = 1; i <= nodes; i++) {
 		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
-		_triplestore_load_node(fd, i, &(t->graph[i]));
+		_triplestore_load_node(t, fd, i, &(t->graph[i]));
 		item->_term	= t->graph[i]._term;
 		item->id	= i;
 		avl_insert( t->dictionary, item );
@@ -448,6 +448,14 @@ struct _sort_s {
 	sort_t* sort;
 };
 
+static void _print_row(const char* head, FILE* f, uint32_t* row, int width) {
+	fprintf(stderr, "%s:", head);
+	for (int i = 1; i <= width; i++) {
+		fprintf(stderr, " %"PRIu32"", row[i]);
+	}
+	fprintf(stderr, "\n");
+}
+
 #ifdef __APPLE__
 int _table_row_cmp(void* thunk, const void* a, const void* b) {
 #else
@@ -459,10 +467,19 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 	uint32_t width		= sort->size;
 	uint32_t* ap		= (uint32_t*) a;
 	uint32_t* bp		= (uint32_t*) b;
+	
 	for (int i = 0; i < width; i++) {
 		int64_t slot	= -(sort->vars[i]);
 		nodeid_t aid	= ap[slot];
 		nodeid_t bid	= bp[slot];
+		if (aid == 0 && bid == 0) {
+			continue;
+		} else if (aid == 0) {
+			return 1;
+		} else if (bid == 0) {
+			return -1;
+		}
+		
 		rdf_term_t* aterm	= t->graph[aid]._term;
 		rdf_term_t* bterm	= t->graph[bid]._term;
 		
@@ -486,6 +503,8 @@ int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort) {
 #else
 	qsort_r(table->ptr, table->used, bytes, _table_row_cmp, &s);
 #endif
+
+
 	return 0;
 }
 
@@ -796,9 +815,10 @@ int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, n
 #pragma mark -
 #pragma mark Sorting
 
-sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables) {
+sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, int unique) {
 	sort_t* sort	= calloc(sizeof(sort_t), 1);
 	sort->size		= variables;
+	sort->unique	= unique;
 	sort->vars		= calloc(sizeof(int64_t), variables);
 	sort->table		= triplestore_new_table(result_width);
 	return sort;
@@ -1051,10 +1071,20 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 			sort_t* sort	= (sort_t*) op->ptr;
 			table_t* table	= sort->table;
 			triplestore_table_sort(t, table, sort);
+			int size			= sizeof(nodeid_t) * (1+query->variables);
+			nodeid_t* last	= calloc(1, size);
 			for (uint32_t row = 0; row < table->used; row++) {
 				uint32_t* result	= triplestore_table_row_ptr(table, row);
-				_triplestore_query_op_match(t, query, op->next, result, block);
+				if (sort->unique) {
+					if (memcmp(last, result, size)) {
+						memcpy(last, result, size);
+						_triplestore_query_op_match(t, query, op->next, result, block);
+					}
+				} else {
+					_triplestore_query_op_match(t, query, op->next, result, block);
+				}
 			}
+			free(last);
 		}
 		op	= op->next;
 	}
@@ -1102,24 +1132,24 @@ static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t) {
 	switch (t->type) {
 		case RAPTOR_TERM_TYPE_URI:
 			value	= (char*) raptor_uri_as_string(t->value.uri);
-			return triplestore_new_term(TERM_IRI, value, NULL, 0);
+			return triplestore_new_term(store, TERM_IRI, value, NULL, 0);
 		case RAPTOR_TERM_TYPE_BLANK:
 			value	= (char*) t->value.blank.string;
-			return triplestore_new_term(TERM_BLANK, value, NULL, 0);
+			return triplestore_new_term(store, TERM_BLANK, value, NULL, 0);
 		case RAPTOR_TERM_TYPE_LITERAL:
 			value	= (char*) t->value.literal.string;
 			if (t->value.literal.language) {
 				vtype	= (char*) t->value.literal.language;
-				return triplestore_new_term(TERM_LANG_LITERAL, value, vtype, 0);
+				return triplestore_new_term(store, TERM_LANG_LITERAL, value, vtype, 0);
 			} else if (t->value.literal.datatype) {
 				vtype	= (char*) raptor_uri_as_string(t->value.literal.datatype);
 				
-				rdf_term_t* datatype	= triplestore_new_term(TERM_IRI, vtype, NULL, 0);
+				rdf_term_t* datatype	= triplestore_new_term(store, TERM_IRI, vtype, NULL, 0);
 				nodeid_t datatypeid		= triplestore_add_term(store, datatype);
 				
-				return triplestore_new_term(TERM_TYPED_LITERAL, value, NULL, datatypeid);
+				return triplestore_new_term(store, TERM_TYPED_LITERAL, value, NULL, datatypeid);
 			} else {
-				return triplestore_new_term(TERM_XSDSTRING_LITERAL, value, NULL, 0);
+				return triplestore_new_term(store, TERM_XSDSTRING_LITERAL, value, NULL, 0);
 			}
 		default:
 			fprintf(stderr, "*** unknown node type %d during import\n", t->type);

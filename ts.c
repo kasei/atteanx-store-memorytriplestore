@@ -215,7 +215,7 @@ int64_t query_node_id(triplestore_t* t, query_t* query, const char* ts) {
 		char* value	= malloc(1 + len);
 		snprintf(value, len, "%s", ts+1);
 // 		fprintf(stderr, "IRI: (%d) <%s>\n", len, value);
-		rdf_term_t* term = triplestore_new_term(TERM_IRI, value, NULL, 0);
+		rdf_term_t* term = triplestore_new_term(t, TERM_IRI, value, NULL, 0);
 		id = triplestore_get_term(t, term);
 		free(value);
 	} else if (ts[0] == '"') {
@@ -230,18 +230,18 @@ int64_t query_node_id(triplestore_t* t, query_t* query, const char* ts) {
 			int len	= q - p + 1;
 			char* dt	= malloc(1 + len);
 			snprintf(dt, len, "%s", p);
-			rdf_term_t* dtterm = triplestore_new_term(TERM_IRI, dt, NULL, 0);
+			rdf_term_t* dtterm = triplestore_new_term(t, TERM_IRI, dt, NULL, 0);
 			int64_t dtid = triplestore_get_term(t, dtterm);
-			term = triplestore_new_term(TERM_TYPED_LITERAL, value, NULL, dtid);
+			term = triplestore_new_term(t, TERM_TYPED_LITERAL, value, NULL, dtid);
 			free(dt);
 		} else if (p[1] == '@') {
 			p += 2;
-			term = triplestore_new_term(TERM_LANG_LITERAL, value, p, 0);
+			term = triplestore_new_term(t, TERM_LANG_LITERAL, value, p, 0);
 // 			char* s	= triplestore_term_to_string(t, term);
 // 			fprintf(stderr, "Term: %s\n", s);
 // 			free(s);
 		} else {
-			term = triplestore_new_term(TERM_XSDSTRING_LITERAL, value, NULL, 0);
+			term = triplestore_new_term(t, TERM_XSDSTRING_LITERAL, value, NULL, 0);
 		}
 		
 		id = triplestore_get_term(t, term);
@@ -430,6 +430,20 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 
 		_triplestore_run_query(t, query, ctx, f);
 		triplestore_free_query(query);
+	} else if (!strcmp(op, "unique")) {
+		if (ctx->constructing == 0) {
+			fprintf(stderr, "unique can only be used during query construction\n");
+			return 1;
+		}
+		query_t* query	= ctx->query;
+		sort_t* sort	= triplestore_new_sort(t, query->variables, query->variables, 1);
+		for (int j = 1; j <= query->variables; j++) {
+			const char* var	= query->variable_names[j];
+			int64_t v	= -j;
+// 			fprintf(stderr, "setting sort variable #%d to ?%s (%"PRId64")\n", j-1, var, v);
+			triplestore_set_sort(sort, j-1, v);
+		}
+		triplestore_query_add_op(ctx->query, QUERY_SORT, sort);
 	} else if (!strcmp(op, "sort")) {
 		if (ctx->constructing == 0) {
 			fprintf(stderr, "sort can only be used during query construction\n");
@@ -438,7 +452,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		query_t* query	= ctx->query;
 		int svars		= argc-i-1;
 // 		fprintf(stderr, "%d sort variables\n", svars);
-		sort_t* sort	= triplestore_new_sort(t, query->variables, svars);
+		sort_t* sort	= triplestore_new_sort(t, query->variables, svars, 0);
 		for (int j = 0; j < svars; j++) {
 			const char* var	= argv[j+i+1];
 			int64_t v	= _triplestore_query_get_variable_id(query, var);
@@ -625,6 +639,23 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" triples\n", elapsed, count);
 		}
+	} else if (!strcmp(op, "count")) {
+		query_t* query		= ctx->query;
+		if (ctx->verbose) {
+			fprintf(stderr, "Counting Query:\n");
+			triplestore_print_query(t, query, stderr);
+		}
+		double start	= triplestore_current_time();
+		__block int count	= 0;
+		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+			count++;
+			return 0;
+		});
+		if (ctx->verbose) {
+			double elapsed	= triplestore_elapsed_time(start);
+			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);
+		}
+		return 0;
 	} else if (!strcmp(op, "agg")) {
 		const char* gs		= argv[++i];
 		const char* op		= argv[++i];
@@ -797,6 +828,14 @@ int main (int argc, char** argv) {
 		linenoiseHistorySave(linenoiseHistoryFile);
 // 	}
 // 	
+	if (0) {
+		fprintf(stderr, "Running test op sequence...\n");
+		triplestore_vop(t, &ctx, 1, "begin");
+		triplestore_vop(t, &ctx, 4, "bgp", "s", "p", "o");
+		triplestore_vop(t, &ctx, 2, "project", "p");
+		triplestore_vop(t, &ctx, 1, "unique");
+		triplestore_vop(t, &ctx, 1, "end");
+	}
 	
 	free_triplestore(t);
 	return 0;
