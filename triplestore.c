@@ -589,6 +589,9 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		strcpy(filter->string2, pat);
 		strcpy(filter->string3, fl);
 
+		filter->string2_type	= TERM_XSDSTRING_LITERAL;
+		filter->string2_lang	= NULL;
+
 		const char *error;
 		int erroffset;
 		int flags		= 0;
@@ -613,10 +616,19 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		
 // 	FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")
 	} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS || type == FILTER_CONTAINS) {
-		filter->node1		= va_arg(ap, int64_t);
-		const char* pat		= va_arg(ap, char*);
-		filter->string2		= calloc(1, 1+strlen(pat));
+		filter->node1			= va_arg(ap, int64_t);
+		const char* pat			= va_arg(ap, char*);
+		rdf_term_type_t type	= va_arg(ap, rdf_term_type_t);
+		filter->string2			= calloc(1, 1+strlen(pat));
 		strcpy(filter->string2, pat);
+		filter->string2_type	= type;
+		if (type == TERM_LANG_LITERAL) {
+			const char* lang		= va_arg(ap, char*);
+			filter->string2_lang	= calloc(1, 1+strlen(lang));
+			strcpy(filter->string2_lang, lang);
+		} else {
+			filter->string2_lang	= NULL;
+		}
 	} else {
 		fprintf(stderr, "*** Unexpected filter type %d\n", type);
 	}
@@ -640,12 +652,22 @@ int triplestore_free_filter(query_filter_t* filter) {
 	return 0;
 }
 
+int _filter_args_are_term_compatible(query_filter_t* filter, rdf_term_t* term) {
+	if (filter->string2_type == TERM_XSDSTRING_LITERAL) {
+		return (term->type == TERM_XSDSTRING_LITERAL);
+	} else if (filter->string2_type == TERM_LANG_LITERAL && term->type == TERM_LANG_LITERAL) {
+		char* filter_lang	= filter->string2_lang;
+		char* term_lang		= term->vtype.value_type;
+		return !strcmp(filter_lang, term_lang);
+	}
+	return 0;
+}
+
 int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* filter, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
 	int64_t node1;
 	int64_t node2;
 	int rc;
 	rdf_term_t* term;
-	char* dt;
 	int OVECCOUNT	= 30;
 	int ovector[OVECCOUNT];
 	switch (filter->type) {
@@ -685,6 +707,9 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 			break;
 		case FILTER_CONTAINS:
 			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+			if (!_filter_args_are_term_compatible(filter, term)) {
+				return 0;
+			}
 			if (strlen(filter->string2) == 0) {
 				// all strings contain the empty pattern
 				break;

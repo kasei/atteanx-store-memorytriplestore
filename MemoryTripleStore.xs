@@ -423,7 +423,7 @@ query__evaluate(query_t* query, triplestore_t* t, SV* closure)
 		});
 
 int
-query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, char* pat, char* flags)
+query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, char* pat, int type, char* lang, char* flags)
 	INIT:
 		int i, j, svars;
 		SV** svp;
@@ -441,11 +441,11 @@ query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, c
 		} else if (!strcmp(op, "isnumeric")) {
 			filter	= triplestore_new_filter(FILTER_ISNUMERIC, var);
 		} else if (!strcmp(op, "starts")) {
-			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
+			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat, type, lang);
 		} else if (!strcmp(op, "ends")) {
-			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
+			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat, type, lang);
 		} else if (!strcmp(op, "contains")) {
-			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat);
+			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat, type, lang);
 		} else if (!strncmp(op, "re", 2)) {
 			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, flags);
 		} else {

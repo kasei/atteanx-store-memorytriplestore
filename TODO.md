@@ -1,10 +1,8 @@
 TODO
 ====
 
-* Add native numeric slot in rdf_term_t to allow native numeric operations
 * Update term sorting code to use SPARQL comparison rules
 * Add support for property paths to AtteanX::Store::MemoryTripleStore::Query
-* Ensure arguments are argument compatible for string filter functions.
 * Translate document-scoped bnode IDs to unique IDs on import
 * Perform simple lexical verification/canonicalization on input for known D-types (numerics, dates)
 * Implement simple filtering over BGP matching (1-variable SARGs plus simple 2-variable ops)
@@ -31,6 +29,8 @@ TODO
 Done
 ====
 
+* Ensure arguments are argument compatible for string filter functions.
+* Add native numeric slot in rdf_term_t to allow native numeric operations
 * Make AtteanX::Store::MemoryTripleStore::Query consume Attean::API::Plan
 * Implement count of triple matching, expose in XS (run triple matching, but avoid materializing perl objects for results)
 * Generalize BGP matching to a query structure that can nest operations (BGPs, filters, aggregates, property paths)

@@ -128,7 +128,17 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 		my $pat		= shift // '';
 		my $pat2	= shift // '';
 		$op			= 'isiri' if ($op eq 'isuri');
-		return $self->_add_filter($self->store, $var, $op, $pat, $pat2);
+		return $self->_add_filter($self->store, $var, $op, $pat, AtteanX::Store::MemoryTripleStore::TERM_XSDSTRING_LITERAL, '', $pat2);
+	}
+	
+	sub add_lang_filter {
+		my $self	= shift;
+		my $var		= shift;
+		my $op		= shift;
+		my $pat		= shift;
+		my $lang	= shift;
+		$op			= 'isiri' if ($op eq 'isuri');
+		return $self->_add_filter($self->store, $var, $op, $pat, AtteanX::Store::MemoryTripleStore::TERM_LANG_LITERAL, $lang, '');
 	}
 	
 	sub add_bgp {

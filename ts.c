@@ -364,6 +364,9 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "begin")) {
 		ctx->constructing	= 1;
 		ctx->query			= NULL;
+		if (argc > i+1) {
+			ctx->query	= construct_bgp_query(t, ctx, argc, argv, i);
+		}
 	} else if (!strcmp(op, "end")) {
 		query_t* query	= ctx->query;
 		ctx->query	= NULL;
@@ -511,11 +514,11 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		} else {
 			const char* pat	= argv[++i];
 			if (!strcmp(op, "starts")) {
-				filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat);
+				filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat, TERM_XSDSTRING_LITERAL);
 			} else if (!strcmp(op, "ends")) {
-				filter	= triplestore_new_filter(FILTER_STRENDS, var, pat);
+				filter	= triplestore_new_filter(FILTER_STRENDS, var, pat, TERM_XSDSTRING_LITERAL);
 			} else if (!strcmp(op, "contains")) {
-				filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat);
+				filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat, TERM_XSDSTRING_LITERAL);
 			} else if (!strncmp(op, "re", 2)) {
 				filter	= triplestore_new_filter(FILTER_REGEX, var, pat, "i");
 			} else {
@@ -692,8 +695,11 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		}
 		
 		double start		= triplestore_current_time();
+		
+		if (strcmp(op, "count")) {
+			fprintf(stderr, "Unrecognized aggregate operation. Assuming count.\n");
+		}
 		uint32_t* counts	= calloc(sizeof(uint32_t), 1+t->nodes_used);
-		int* seen			= calloc(1, 1+t->nodes_used);
 		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
 			nodeid_t group	= 0;
 			if (groupvar != 0) {
@@ -724,7 +730,6 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 			}
 		}
 		free(counts);
-		free(seen);
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);
