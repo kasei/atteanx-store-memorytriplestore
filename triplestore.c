@@ -2,6 +2,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -63,6 +64,43 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 		strcpy(term->vtype.value_type, vtype);
 	} else {
 		term->vtype.value_id	= vid;
+		if (vid > 0) {
+// 			char* ss		= triplestore_term_to_string(t, term);
+// 			fprintf(stderr, "typed literal: %s\n", ss);
+// 			free(ss);
+
+			rdf_term_t* dt	= t->graph[ vid ]._term;
+			if (dt) {
+				if (!strncmp(dt->value, "http://www.w3.org/2001/XMLSchema#", 33)) {
+					char* type	= dt->value + 33;
+					if (!strcmp(type, "integer")) {
+						term->is_numeric	= 1;
+						term->numeric_value	= (double) atoll(term->value);
+					} else if (!strcmp(type, "decimal")) {
+						term->is_numeric	= 1;
+						term->numeric_value	= (double) atof(term->value);
+					} else if (!strcmp(type, "float") || !strcmp(type, "double")) {
+// 						fprintf(stderr, "--------\n");
+// 						char* ss		= triplestore_term_to_string(t, term);
+// 						fprintf(stderr, "typed literal: %s\n", ss);
+// 						free(ss);
+
+						term->is_numeric	= 1;
+						term->numeric_value	= (double) atof(term->value);
+					}
+				}
+			}
+			
+// 			if (term->is_numeric) {
+// 				fprintf(stderr, ">>> Numeric literal: %lf\n", term->numeric_value);
+// 			}
+// 			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
+// 				sprintf(string, "%s", t->value);
+// 			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
+
+
+
+		}
 	}
 	
 	return term;
@@ -135,6 +173,10 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
 				sprintf(string, "%s", t->value);
 			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
+				sprintf(string, "%s", t->value);
+			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#float>")) {
+				sprintf(string, "%s", t->value);
+			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#double>")) {
 				sprintf(string, "%s", t->value);
 			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#boolean>")) {
 				sprintf(string, "%s", t->value);
@@ -483,6 +525,22 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 		rdf_term_t* aterm	= t->graph[aid]._term;
 		rdf_term_t* bterm	= t->graph[bid]._term;
 		
+		if (aterm->is_numeric && bterm->is_numeric) {
+			double av	= aterm->numeric_value;
+			double bv	= bterm->numeric_value;
+			if (av == bv) {
+				continue;
+			} else if (av < bv) {
+				return -1;
+			} else {
+				return 1;
+			}
+		} else if (aterm->is_numeric) {
+			return 1;
+		} else if (bterm->is_numeric) {
+			return -1;
+		}
+		
 		char* as	= triplestore_term_to_string(t, aterm);
 		char* bs	= triplestore_term_to_string(t, bterm);
 		int r		= strcmp(as, bs);
@@ -503,7 +561,6 @@ int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort) {
 #else
 	qsort_r(table->ptr, table->used, bytes, _table_row_cmp, &s);
 #endif
-
 
 	return 0;
 }
