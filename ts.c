@@ -438,8 +438,8 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		query_t* query	= ctx->query;
 		sort_t* sort	= triplestore_new_sort(t, query->variables, query->variables, 1);
 		for (int j = 1; j <= query->variables; j++) {
-			const char* var	= query->variable_names[j];
 			int64_t v	= -j;
+// 			const char* var	= query->variable_names[j];
 // 			fprintf(stderr, "setting sort variable #%d to ?%s (%"PRId64")\n", j-1, var, v);
 			triplestore_set_sort(sort, j-1, v);
 		}
