@@ -245,14 +245,29 @@ Otherwise, returns an empty list.
 		my $self	= shift;
 		my $algebra	= shift;
 		return unless blessed($algebra);
-		if ($algebra->isa('Attean::Algebra::BGP')) {
+		if ($algebra->isa('Attean::Algebra::Join')) {
+			my ($lhs, $rhs)	= @{ $algebra->children };
+			if ($rhs->isa('Attean::Algebra::Path')) {
+				if (my $query = $self->_query_for_plannable_algebra($lhs)) {
+					my $path	= $rhs->path;
+					if ($path->isa('Attean::Algebra::OneOrMorePath')) {
+						my @children	= @{ $path->children };
+						if (scalar(@children) == 1) {
+							my ($p)	= @children;
+							if ($p->isa('Attean::Algebra::PredicatePath')) {
+								$query->add_path('+', $rhs->subject, $p->predicate, $rhs->object);
+								return $query;
+							}
+						}
+					}
+				}
+			}
+		} elsif ($algebra->isa('Attean::Algebra::BGP')) {
 			my @triples	= $self->_ordered_triples_from_bgp($algebra);
 			my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $self);
 			$query->add_bgp(@triples);
 			return $query;
 		} elsif ($algebra->isa('Attean::Algebra::Path')) {
-			my $s		= $algebra->subject;
-			my $o		= $algebra->object;
 			my $path	= $algebra->path;
 			if ($path->isa('Attean::Algebra::OneOrMorePath')) {
 				my @children	= @{ $path->children };
@@ -260,7 +275,7 @@ Otherwise, returns an empty list.
 					my ($p)	= @children;
 					if ($p->isa('Attean::Algebra::PredicatePath')) {
 						my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $self);
-						$query->add_path('+', $s, $p->predicate, $o);
+						$query->add_path('+', $algebra->subject, $p->predicate, $algebra->object);
 						return $query;
 					}
 				}
@@ -269,7 +284,12 @@ Otherwise, returns an empty list.
 		} else {
 			my ($child)	= @{ $algebra->children };
 			if (my $query = $self->_query_for_plannable_algebra($child)) {
-				if ($algebra->isa('Attean::Algebra::Filter')) {
+				if ($algebra->isa('Attean::Algebra::Project')) {
+					my $vars	= $algebra->variables;
+					my @vars	= map { $_->value } @$vars;
+					$query->add_project(@vars);
+					return $query;
+				} elsif ($algebra->isa('Attean::Algebra::Filter')) {
 					my $expr	= $algebra->expression;
 					my $s		= $expr->as_string;
 					if ($s =~ /^REGEX\([?]\w+, "[^"]+"\)$/) {
@@ -307,6 +327,7 @@ Otherwise, returns an empty list.
 	sub plans_for_algebra {
 		my $self	= shift;
 		my $algebra	= shift;
+		return unless ($algebra);
 		
 		if (my $query = $self->_query_for_plannable_algebra($algebra)) {
 			return $query;

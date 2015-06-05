@@ -246,6 +246,50 @@ test 'OnOrMore path with variable subject' => sub {
 	is_deeply(\%seen, \%expect, "expected knows paths");
 };
 
+test 'BGP + OnOrMore path' => sub {
+	my $self	= shift;
+	my $store	= $self->_store_with_path_data();
+	my $graph	= iri('http://example.org/');
+	my $model	= Attean::TripleModel->new( stores => { $graph->value => $store } );
+	my $planner	= Attean::IDPQueryPlanner->new();
+	my $t		= AtteanX::RDFQueryTranslator->new();
+	
+	# Knows relationships
+	# eve -> alice <-> bob
+	#               -> tim
+
+	my $query	= RDF::Query->new("PREFIX foaf: <http://xmlns.com/foaf/0.1/> SELECT * WHERE { ?s foaf:name ?name ; foaf:knows+ ?o }");
+	my $algebra	= $t->translate_query($query);
+		
+	my $plan	= $planner->plan_for_algebra($algebra, $model, [$graph]);
+	isa_ok($plan, 'AtteanX::Store::MemoryTripleStore::Query');
+	
+	my $iter	= $plan->evaluate($model);
+	my $count	= 0;
+	my %seen;
+	while (my $r = $iter->next) {
+		$count++;
+		$seen{ $r->value('name')->value }{ $r->value('o')->value }++;
+	}
+	
+	my %expect;
+	$expect{'Eve'}{'http://example.org/alice'}++;
+	$expect{'Eve'}{'http://example.org/bob'}++;
+	$expect{'Eve'}{'http://example.org/tim'}++;
+
+	$expect{'Alice'}{'http://example.org/alice'}++;
+	$expect{'Alice'}{'http://example.org/bob'}++;
+	$expect{'Alice'}{'http://example.org/tim'}++;
+
+	$expect{'Robert'}{'http://example.org/bob'}++;
+	$expect{'Robert'}{'http://example.org/alice'}++;
+	$expect{'Robert'}{'http://example.org/tim'}++;
+
+# 	use Data::Dumper;
+# 	warn Dumper(\%seen);
+	is_deeply(\%seen, \%expect, "expected knows paths");
+};
+
 run_me; # run these Test::Attean tests
 
 done_testing();
