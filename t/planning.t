@@ -220,7 +220,7 @@ test 'OnOrMore path with variable subject' => sub {
 	my $query	= RDF::Query->new("PREFIX foaf: <http://xmlns.com/foaf/0.1/> SELECT * WHERE { ?s foaf:knows+ ?o }");
 	my $algebra	= $t->translate_query($query);
 	my $plan	= $planner->plan_for_algebra($algebra, $model, [$graph]);
-	my $iter	= $plan->evaluate();
+	my $iter	= $plan->evaluate($model);
 	my $count	= 0;
 	my %seen;
 	while (my $r = $iter->next) {

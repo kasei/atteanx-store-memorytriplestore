@@ -330,38 +330,6 @@ triplestore_DESTROY (triplestore_t *store)
 //		 fprintf(stderr, "destroying triplestore: %p\n", store);
 	  free_triplestore(store);
 
-void
-triplestore_match_path_cb(triplestore_t* t, IV path_type, IV variables, AV* ids, AV* names, SV* closure)
-	INIT:
-		int i;
-		SV **svs, **svp, **svo;
-		char* ptr;
-		path_t* path;
-		query_t* query;
-		IV iv;
-	CODE:
-		query = triplestore_new_query(t, variables);
-		for (i = 1; i <= variables; i++) {
-			svp	= av_fetch(names, i, 0);
-			ptr = SvPV_nolen(*svp);
-			triplestore_query_set_variable_name(query, i, ptr);
-		}
-		svs			= av_fetch(ids, 0, 0);
-		svp			= av_fetch(ids, 1, 0);
-		svo			= av_fetch(ids, 2, 0);
-		int64_t s	= (int64_t) SvIV(*svs);
-		int64_t p	= (int64_t) SvIV(*svp);
-		int64_t o	= (int64_t) SvIV(*svo);
-		
-		path		= triplestore_new_path(t, (path_type_t) path_type, s, (nodeid_t) p, o);		
-		triplestore_query_add_op(query, QUERY_PATH, path);
-		
-		// triplestore_print_query(t, query, stderr);
-		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
-			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
-			return 0;
-		});
-		triplestore_free_query(query);
 
 void
 triplestore_get_triples_cb(triplestore_t* t, IV s, IV p, IV o, SV* closure)
@@ -404,6 +372,27 @@ query_build_struct (SV* self, triplestore_t* t)
 		} else {
 			xs_object_magic_attach_struct(aTHX_ SvRV(self), q);
 			RETVAL = 0;
+		}
+	OUTPUT:
+		RETVAL
+
+IV
+query_get_variable_id(query_t* query, char* var)
+	CODE:
+		RETVAL = (IV) _triplestore_query_get_variable_id(query, (const char*) var);
+	OUTPUT:
+		RETVAL
+
+IV
+query_get_or_assign_variable_id(query_t* query, char* var)
+	INIT:
+		int64_t id;
+	CODE:
+		id	= _triplestore_query_get_variable_id(query, (const char*) var);
+		if (id) {
+			RETVAL = (IV) id;
+		} else {
+			RETVAL	= (IV) triplestore_query_add_variable(query, var);
 		}
 	OUTPUT:
 		RETVAL
@@ -501,6 +490,31 @@ query__add_sort (query_t* query, triplestore_t* t, AV* names, int unique)
 		RETVAL = triplestore_query_add_op(query, QUERY_SORT, sort);
 	OUTPUT:
 		RETVAL	
+
+void
+query__add_path (query_t* query, triplestore_t* t, IV path_type, IV variables, AV* ids, AV* names)
+	INIT:
+		int i;
+		SV **svs, **svp, **svo;
+		char* ptr;
+		path_t* path;
+		IV iv;
+	CODE:
+		for (i = 1; i <= variables; i++) {
+			svp	= av_fetch(names, i, 0);
+			ptr = SvPV_nolen(*svp);
+			triplestore_ensure_variable_capacity(query, i);
+			triplestore_query_set_variable_name(query, i, ptr);
+		}
+		svs			= av_fetch(ids, 0, 0);
+		svp			= av_fetch(ids, 1, 0);
+		svo			= av_fetch(ids, 2, 0);
+		int64_t s	= (int64_t) SvIV(*svs);
+		int64_t p	= (int64_t) SvIV(*svp);
+		int64_t o	= (int64_t) SvIV(*svo);
+		
+		path		= triplestore_new_path(t, (path_type_t) path_type, s, (nodeid_t) p, o);		
+		triplestore_query_add_op(query, QUERY_PATH, path);
 
 void
 query__add_bgp (query_t* query, triplestore_t* t, IV triples, IV variables, AV* ids, AV* names)

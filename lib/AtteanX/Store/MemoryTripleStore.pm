@@ -162,44 +162,6 @@ containing a set of possible term values.
 		return Attean::ListIterator->new(values => \@results, item_type => 'Attean::API::Result');
 	}
 	
-	sub match_path {
-		my $self	= shift;
-		my @ids;
-		my $last	= 0;
-		my %vars;
-		my @names	= ('');
-		my $type	= shift;
-		my $vars	= 0;
-		foreach my $term (@_) {
-			if ($term->does('Attean::API::Variable')) {
-				if (exists $vars{$term->value}) {
-					push(@ids, $vars{$term->value});
-				} else {
-					my $id	= ++$last;
-					$names[$id]	= $term->value;
-					$vars{$term->value}	= -$id;
-					push(@ids, -$id);
-				}
-			} else {
-				my $id		= $self->_id_from_term($term);
-				unless ($id) {
-					# term does not exist in the store
-# 					warn 'term does not exist in the store: ' . $term->as_string;
-					return Attean::ListIterator->new(values => [], item_type => 'Attean::API::Triple');
-				}
-				push(@ids, $id);
-			}
-		}
-		
-		my @results;
-		$self->match_path_cb($type, $last, \@ids, \@names, sub {
-			my $hash	= shift;
-			my $result	= Attean::Result->new( bindings => $hash );
-			push(@results, $result);
-		});
-		return Attean::ListIterator->new(values => \@results, item_type => 'Attean::API::Result');
-	}
-	
 	sub _id_from_term {
 		my $self	= shift;
 		my $term	= shift;
@@ -288,6 +250,22 @@ Otherwise, returns an empty list.
 			my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $self);
 			$query->add_bgp(@triples);
 			return $query;
+		} elsif ($algebra->isa('Attean::Algebra::Path')) {
+			my $s		= $algebra->subject;
+			my $o		= $algebra->object;
+			my $path	= $algebra->path;
+			if ($path->isa('Attean::Algebra::OneOrMorePath')) {
+				my @children	= @{ $path->children };
+				if (scalar(@children) == 1) {
+					my ($p)	= @children;
+					if ($p->isa('Attean::Algebra::PredicatePath')) {
+						my $query	= AtteanX::Store::MemoryTripleStore::Query->new(store => $self);
+						$query->add_path('+', $s, $p->predicate, $o);
+						return $query;
+					}
+				}
+			}
+			return;
 		} else {
 			my ($child)	= @{ $algebra->children };
 			if (my $query = $self->_query_for_plannable_algebra($child)) {
@@ -333,31 +311,6 @@ Otherwise, returns an empty list.
 		if (my $query = $self->_query_for_plannable_algebra($algebra)) {
 			return $query;
 		}
-		
-		if ($algebra->isa('Attean::Algebra::Path')) {
-			my $s		= $algebra->subject;
-			my $o		= $algebra->object;
-			my $path	= $algebra->path;
-			if ($path->isa('Attean::Algebra::OneOrMorePath')) {
-				my @children	= @{ $path->children };
-				if (scalar(@children) == 1) {
-					my ($p)	= @children;
-					if ($p->isa('Attean::Algebra::PredicatePath')) {
-						return AtteanX::Store::MemoryTripleStore::PathPlan->new(
-							subject	=> $s,
-							object	=> $o,
-							predicate	=> $p->predicate,
-							type => PATH_PLUS,
-							store		=> $self,
-							distinct	=> 0,
-							in_scope_variables	=> [ $algebra->in_scope_variables ],
-							ordered	=> [],
-						);
-					}
-				}
-			}
-			return;
-		}
 		return;
 	}
 
@@ -377,35 +330,6 @@ Otherwise returns C<undef>.
 			return 1; # TODO: actually estimate cost here
 		}
 		return;
-	}
-}
-
-package AtteanX::Store::MemoryTripleStore::PathPlan 0.001 {
-	use Moo;
-	use Types::Standard qw(ConsumerOf ArrayRef InstanceOf Int);
-	with 'Attean::API::Plan', 'Attean::API::NullaryQueryTree';
-	has 'type' => (is => 'ro', isa => Int, required => 1);
-	has 'subject' => (is => 'ro',  isa => ConsumerOf['Attean::API::TermOrVariable'], required => 1);
-	has 'predicate' => (is => 'ro',  isa => ConsumerOf['Attean::API::IRI'], required => 1);
-	has 'object' => (is => 'ro',  isa => ConsumerOf['Attean::API::TermOrVariable'], required => 1);
-	has 'store' => (is => 'ro', isa => InstanceOf['AtteanX::Store::MemoryTripleStore'], required => 1);
-	sub plan_as_string {
-		my $self	= shift;
-		my $op		= ($self->type == AtteanX::Store::MemoryTripleStore::PATH_PLUS) ? '+' : '*';
-		return sprintf('MemoryTripleStorePath { %s <%s>%s %s }', $self->subject->as_string, $self->predicate->as_string, $op, $self->object->as_string);
-	}
-	
-	sub impl {
-		my $self	= shift;
-		my $model	= shift;
-		my $store	= $self->store;
-		my $s		= $self->subject;
-		my $p		= $self->predicate;
-		my $o		= $self->object;
-		my $type	= $self->type;
-		return sub {
-			return $store->match_path($type, $s, $p, $o);
-		}
 	}
 }
 

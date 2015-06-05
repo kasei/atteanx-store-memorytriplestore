@@ -141,6 +141,43 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 		return $self->_add_filter($self->store, $var, $op, $pat, AtteanX::Store::MemoryTripleStore::TERM_LANG_LITERAL, $lang, '');
 	}
 	
+	sub add_path {
+		my $self	= shift;
+		my $op		= shift;
+		if ($op ne '+') {
+			die "Unexpected path type '%op'";
+		}
+		
+		my @ids;
+		my $last	= 0;
+		my %vars;
+		my @names	= ('');
+		my $vars	= 0;
+		foreach my $term (@_) {
+			if ($term->does('Attean::API::Variable')) {
+				my $id	= $self->get_or_assign_variable_id($term->value);
+				$vars{$term->value}	= $id;
+				push(@ids, $id);
+			} else {
+				my $id		= $self->store->_id_from_term($term);
+				unless ($id) {
+					# term does not exist in the store
+# 					warn 'term does not exist in the store: ' . $term->as_string;
+					return Attean::ListIterator->new(values => [], item_type => 'Attean::API::Triple');
+				}
+				push(@ids, $id);
+			}
+		}
+		
+		return $self->_add_path(
+			$self->store,
+			AtteanX::Store::MemoryTripleStore::PATH_PLUS,
+			$vars,
+			\@ids,
+			\@names,
+		);
+	}
+	
 	sub add_bgp {
 		my $self	= shift;
 		my @triples	= @_;

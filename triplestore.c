@@ -987,14 +987,27 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 	if (path->type == PATH_STAR || path->type == PATH_PLUS) {
 		char* seen	= calloc(1, t->nodes_used);
 		int r;
-		if (path->start <= 0) {
+		
+		int64_t start	= path->start;
+// 		fprintf(stderr, "matching path with start %"PRId64"\n", start);
+		if (start < 0) {
+			int64_t s	= current_match[-start];
+			if (s > 0) {
+				start	= s;
+// 				fprintf(stderr, "replacing path start with bound term %"PRId64"\n", start);
+			}
+		}
+		
+		if (start <= 0) {
+// 			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
 			char* starts	= calloc(1, t->nodes_used);
-			r	= triplestore_match_triple(t, path->start, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
+			r	= triplestore_match_triple(t, start, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 				if (starts[_s]++) {
 					return 0;
 				}
 				memset(seen, 0, t->nodes_used);
-				current_match[-(path->start)]	= _s;
+// 				fprintf(stderr, "path match setting match[%"PRId64"]\n", -start);
+				current_match[-start]	= _s;
 				return _triplestore_path_step(t, _s, path->pred, seen, 0, ^(nodeid_t reached) {
 					if (path->end < 0) {
 						current_match[-(path->end)]	= reached;
@@ -1008,7 +1021,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 			});
 			free(starts);
 		} else {
-			r	= _triplestore_path_step(t, path->start, path->pred, seen, 0, ^(nodeid_t reached) {
+			r	= _triplestore_path_step(t, start, path->pred, seen, 0, ^(nodeid_t reached) {
 				if (path->end < 0) {
 					current_match[-(path->end)]	= reached;
 				}
@@ -1548,7 +1561,7 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 }
 
 void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** variable_names, FILE* f) {
-	fprintf(f, "- Triples: %d\n", bgp->triples);
+	fprintf(f, "Triples: %d\n", bgp->triples);
 	for (int i = 0; i < bgp->triples; i++) {
 		int64_t s	= bgp->nodes[3*i+0];
 		int64_t p	= bgp->nodes[3*i+1];
@@ -1582,7 +1595,7 @@ void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op
 
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f) {
 	fprintf(f, "--- QUERY ---\n");
-	fprintf(f, "- Variables: %d\n", query->variables);
+	fprintf(f, "Variables: %d\n", query->variables);
 	for (int v = 1; v <= query->variables; v++) {
 		fprintf(f, "  - %s\n", query->variable_names[v]);
 	}
