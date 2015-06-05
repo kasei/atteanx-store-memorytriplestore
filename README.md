@@ -39,14 +39,14 @@ while (my $result = $iter->next) {
 }
 
 % perl test.pl
-{name="Ascension Island"@en}
-{name="Bouvet Island"@en}
-{name="Cayman Islands"@en}
-{name="Commander Islands"@en}
-{name="Commonwealth of the Northern Mariana Islands"@en}
-{name="Cook Islands"@en}
-{name="Falkland Islands"@en}
-{name="Faroe Islands"@en}
+{name="Ascension Island"@en, lat="-7.933333333333334"^^<http://www.w3.org/2001/XMLSchema#float>, long="-14.416666666666666"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Bouvet Island"@en, lat="-54.43"^^<http://www.w3.org/2001/XMLSchema#float>, long="3.38"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Cayman Islands"@en, lat="19.333333333333332"^^<http://www.w3.org/2001/XMLSchema#float>, long="-81.4"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Commander Islands"@en, lat="55.2"^^<http://www.w3.org/2001/XMLSchema#float>, long="165.98333333333332"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Commonwealth of the Northern Mariana Islands"@en, lat="15.233333333333333"^^<http://www.w3.org/2001/XMLSchema#float>, long="145.75"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Cook Islands"@en, lat="-21.2"^^<http://www.w3.org/2001/XMLSchema#float>, long="-159.76666666666668"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Falkland Islands"@en, lat="-51.7"^^<http://www.w3.org/2001/XMLSchema#float>, long="-57.85"^^<http://www.w3.org/2001/XMLSchema#float>}
+{name="Faroe Islands"@en, lat="62.0"^^<http://www.w3.org/2001/XMLSchema#float>, long="-6.783333333333333"^^<http://www.w3.org/2001/XMLSchema#float>}
 ...
 ```
 
@@ -58,7 +58,7 @@ be used to query loaded RDF data directly, without using the perl API:
 
 ```
 % make -f Makefile.cli
-% ./ts -v dbpedia.nt
+% ./ts dbpedia.nt
 ts> begin
 ts> bgp ?s <http://dbpedia.org/ontology/longName> ?name ?s <http://www.w3.org/2003/01/geo/wgs84_pos#lat> ?lat ?s <http://www.w3.org/2003/01/geo/wgs84_pos#long> ?long
 ts> filter regex ?name island i
