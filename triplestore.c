@@ -738,7 +738,11 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 			}
 			return 0;
 		case FILTER_REGEX:
-			term	= t->graph[ current_match[-(filter->node1)] ]._term;
+			node1	= filter->node1;
+			if (node1 == 0) {
+				return 0;
+			}
+			term	= t->graph[ current_match[-node1] ]._term;
 			// fprintf(stderr, "matching (?%s) %s =~ %s (%p)\n", query->variable_names[-(filter->node1)], term->value, filter->string2, filter->re);
 			rc		= pcre_exec(
 				filter->re,					/* the compiled pattern */
@@ -1184,7 +1188,7 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 #pragma mark -
 
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp) {
-	if (t->edges_used >= t->edges_alloc) {
+	if ((1+t->edges_used) >= t->edges_alloc) {
 		if (triplestore_expand_edges(t)) {
 			fprintf(stderr, "*** Exhausted allocated space for edges.\n");
 			return 1;
@@ -1265,7 +1269,7 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 	i.id			= 0;
 	hx_nodemap_item* item	= (hx_nodemap_item*) avl_find( t->dictionary, &i );
 	if (item == NULL) {
-		if (t->nodes_used >= t->nodes_alloc) {
+		if ((1+t->nodes_used) >= t->nodes_alloc) {
 			if (triplestore_expand_nodes(t)) {
 				fprintf(stderr, "*** Exhausted allocated space for nodes.\n");
 				return 1;
