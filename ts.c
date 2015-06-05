@@ -824,7 +824,7 @@ int main (int argc, char** argv) {
 	
 // 	if (interactive) {
 		char* line;
-		while ((line = linenoise("sparql> ")) != NULL) {
+		while ((line = linenoise("ts> ")) != NULL) {
 			char* argv[16];
 			int len	= strlen(line);
 			char* buffer	= malloc(1+len);
