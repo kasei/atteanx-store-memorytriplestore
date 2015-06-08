@@ -71,7 +71,8 @@ package AtteanX::Store::MemoryTripleStore {
 			}
 		} elsif (my $db = $args->{'database'}) {
 			if (-r $db) {
-				$self->load($db);
+				my $verbose	= 0;
+				$self->load($db, $verbose);
 			} else {
 				warn "*** Cannot read from database $db";
 			}
@@ -81,7 +82,7 @@ package AtteanX::Store::MemoryTripleStore {
 	sub load_file {
 		my $self	= shift;
 		my $filename	= shift;
-		$self->_load_file($filename, 0, 0);
+		$self->_load_file($filename, 0);
 	}
 	
 =item C<< get_triples ( $subject, $predicate, $object ) >>

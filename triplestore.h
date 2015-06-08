@@ -158,11 +158,10 @@ nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm);
 
 
 int triplestore_dump(triplestore_t* t, const char* filename);
-int triplestore_load(triplestore_t* t, const char* filename);
+int triplestore_load(triplestore_t* t, const char* filename, int verbose);
 
 
-
-int triplestore__load_file(triplestore_t* t, const char* filename, int print, int verbose);
+int triplestore__load_file(triplestore_t* t, const char* filename, int verbose);
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o));
 int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(nodeid_t* final_match));

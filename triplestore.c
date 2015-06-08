@@ -14,7 +14,7 @@
 
 struct parser_ctx_s {
 	int verbose;
-	int print;
+// 	int print;
 	int error;
 	int64_t limit;
 	uint64_t count;
@@ -374,7 +374,8 @@ int triplestore_dump(triplestore_t* t, const char* filename) {
 	return 0;
 }
 
-int triplestore_load(triplestore_t* t, const char* filename) {
+int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
+	double start	= triplestore_current_time();
 	int fd	= open(filename, O_RDONLY);
 	if (fd == -1) {
 		perror("failed to open file for loading triplestore");
@@ -444,6 +445,10 @@ int triplestore_load(triplestore_t* t, const char* filename) {
 // 		}
 // 	}
 
+	if (verbose) {
+		double elapsed	= triplestore_elapsed_time(start);
+		fprintf( stderr, "Finished loading %"PRIu32" triples in %lgs (%5.1f triples/second)\n", edges, elapsed, ((double)edges/elapsed) );
+	}
 	return 0;
 }
 
@@ -1367,14 +1372,13 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 	raptor_free_world(world);
 }
 
-int triplestore__load_file(triplestore_t* t, const char* filename, int print, int verbose) {
+int triplestore__load_file(triplestore_t* t, const char* filename, int verbose) {
 	__block struct parser_ctx_s pctx	= {
 		.limit				= -1,
 		.error				= 0,
 		.graph				= 0LL,
 		.count				= 0,
 		.verbose			= verbose,
-		.print				= print,
 		.start				= triplestore_current_time(),
 		.store				= t,
 		.timestamp			= (uint64_t) time(NULL),

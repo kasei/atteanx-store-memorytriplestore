@@ -332,11 +332,6 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		return 1;
 	}
 	
-// 	fprintf(stderr, "Interactive command:\n");
-// 	for (int i = 0; i < argc; i++) {
-// 		fprintf(stderr, "[%d] %s\n", i, argv[i]);
-// 	}
-	
 	int i	= 0;
 	FILE* f	= ctx->print ? stdout : NULL;
 	const char* op			= argv[i];
@@ -361,6 +356,9 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		} else if (!strcmp(field, "limit")) {
 			ctx->limit	= -1;
 		}
+	} else if (!strcmp(op, "size")) {
+		uint32_t count	= triplestore_size(t);
+		fprintf(f, "%"PRIu32" triples\n", count);
 	} else if (!strcmp(op, "begin")) {
 		ctx->constructing	= 1;
 		ctx->query			= NULL;
@@ -566,7 +564,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "load")) {
 		const char* filename	= argv[++i];
 		double start	= triplestore_current_time();
-		triplestore_load(t, filename);
+		triplestore_load(t, filename, ctx->verbose);
 		uint32_t count	= triplestore_size(t);
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);
@@ -583,7 +581,7 @@ int triplestore_op(triplestore_t* t, struct runtime_ctx_s* ctx, int argc, char**
 		}
 	} else if (!strcmp(op, "import")) {
 		const char* filename	= argv[++i];
-		if (triplestore__load_file(t, filename, ctx->print, ctx->verbose)) {
+		if (triplestore__load_file(t, filename, ctx->verbose)) {
 			fprintf(stderr, "Failed to import file %s\n", filename);
 		}
 	} else if (!strcmp(op, "debug")) {
@@ -767,15 +765,9 @@ int main (int argc, char** argv) {
 		return 0;
 	}
 	
-	if (argc == 1) {
-		usage(argc, argv, stderr);
-		return 1;
-	}
-
 	char* linenoiseHistoryFile	= ".triplestore-history";
 	linenoiseHistoryLoad(linenoiseHistoryFile);
 
-// 	int interactive		= 0;
 	int max_edges		= 65536;
 	int max_nodes		= 65536;
 	triplestore_t* t	= new_triplestore(max_nodes, max_edges);
@@ -797,9 +789,6 @@ int main (int argc, char** argv) {
 			ctx.verbose++;
 		} else if (!strncmp(flag, "-p", 2)) {
 			ctx.print++;
-// 		} else if (!strncmp(flag, "-i", 2)) {
-// 			interactive	= 1;
-// 			ctx.print = 1;
 		}
 	}
 
@@ -807,13 +796,13 @@ int main (int argc, char** argv) {
 		const char* filename	= argv[i++];
 		const char* suffix		= strstr(filename, ".db");
 		if (suffix && !strcmp(suffix, ".db")) {
-			triplestore_load(t, filename);
+			triplestore_load(t, filename, ctx.verbose);
 		} else {
 			if (ctx.verbose) {
 				fprintf(stderr, "Importing %s\n", filename);
 			}
 	
-			triplestore__load_file(t, filename, ctx.print, ctx.verbose);
+			triplestore__load_file(t, filename, ctx.verbose);
 			if (ctx.error) {
 				return 1;
 			}
@@ -822,31 +811,29 @@ int main (int argc, char** argv) {
 
 	triplestore_op(t, &ctx, argc-i, &(argv[i]));
 	
-// 	if (interactive) {
-		char* line;
-		while ((line = linenoise("ts> ")) != NULL) {
-			char* argv[16];
-			int len	= strlen(line);
-			char* buffer	= malloc(1+len);
-			strcpy(buffer, line);
-			int argc	= 1;
-			argv[0]		= buffer;
-			for (int i = 0; i < len; i++) {
-				if (buffer[i] == ' ') {
-					buffer[i]	= '\0';
-					argv[argc++]	= &(buffer[i+1]);
-				}
+	char* line;
+	while ((line = linenoise("ts> ")) != NULL) {
+		char* argv[16];
+		int len	= strlen(line);
+		char* buffer	= malloc(1+len);
+		strcpy(buffer, line);
+		int argc	= 1;
+		argv[0]		= buffer;
+		for (int i = 0; i < len; i++) {
+			if (buffer[i] == ' ') {
+				buffer[i]	= '\0';
+				argv[argc++]	= &(buffer[i+1]);
 			}
-			if (!triplestore_op(t, &ctx, argc, argv)) {
-				if (strlen(line) > 0) {
-					linenoiseHistoryAdd(line);
-				}
-			}
-			free(buffer);
 		}
-		linenoiseHistorySave(linenoiseHistoryFile);
-// 	}
-// 	
+		if (!triplestore_op(t, &ctx, argc, argv)) {
+			if (strlen(line) > 0) {
+				linenoiseHistoryAdd(line);
+			}
+		}
+		free(buffer);
+	}
+	linenoiseHistorySave(linenoiseHistoryFile);
+
 	if (0) {
 		fprintf(stderr, "Running test op sequence...\n");
 		triplestore_vop(t, &ctx, 1, "begin");
