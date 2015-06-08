@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include "triplestore.h"
 
 struct parser_ctx_s {
@@ -54,12 +56,17 @@ double triplestore_elapsed_time ( double start ) {
 #pragma mark RDF Terms
 
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
-	rdf_term_t* term	= calloc(sizeof(rdf_term_t), 1);
+	char* v				= calloc(1, sizeof(rdf_term_t) + strlen(value) + 1);
+	rdf_term_t* term	= (rdf_term_t*) (v + 1 + strlen(value));
+	term->value			= v;
+// 	rdf_term_t* term	= calloc(sizeof(rdf_term_t), 1);
 	term->type			= type;
-	term->value			= calloc(1, 1+strlen(value));
+// 	term->value			= calloc(1, 1+strlen(value));
 	strcpy(term->value, value);
 	
 	if (vtype) {
+		fprintf(stderr, "term size: %d\n", (int) sizeof(rdf_term_t));
+		assert(strlen(vtype) < 8);
 		term->vtype.value_type	= calloc(1, 1+strlen(vtype));
 		strcpy(term->vtype.value_type, vtype);
 	} else {
@@ -107,11 +114,11 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 }
 
 void free_rdf_term(rdf_term_t* t) {
-	free(t->value);
 	if (t->type == TERM_LANG_LITERAL) {
 		free(t->vtype.value_type);
 	}
-	free(t);
+	free(t->value);
+// 	free(t);
 }
 
 int triplestore_size(triplestore_t* t) {
@@ -121,11 +128,7 @@ int triplestore_size(triplestore_t* t) {
 int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	if (a == NULL) return -1;
 	if (b == NULL) return 1;
-	if (a->type < b->type) {
-		return -1;
-	} else if (a->type > b->type) {
-		return 1;
-	} else {
+	if (a->type == b->type) {
 		if (a->type == TERM_LANG_LITERAL) {
 			int r	= strcmp(a->vtype.value_type, b->vtype.value_type);
 			if (r) {
@@ -138,6 +141,12 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 		}
 		
 		return strcmp(a->value, b->value);
+	} else {
+		if (a->type < b->type) {
+			return -1;
+		} else { //  if (a->type > b->type) {
+			return 1;
+		}
 	}
 	return 0;
 }
@@ -194,8 +203,7 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 static int _hx_node_cmp_str ( const void* a, const void* b, void* param ) {
 	hx_nodemap_item* ia	= (hx_nodemap_item*) a;
 	hx_nodemap_item* ib	= (hx_nodemap_item*) b;
-	int c				= term_compare(ia->_term, ib->_term);
-	return c;
+	return term_compare(ia->_term, ib->_term);
 }
 
 static void _hx_free_node_item (void *avl_item, void *avl_param) {
@@ -297,23 +305,26 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	return 0;
 }
 
-static rdf_term_t* _readterm(triplestore_t* t, int fd) {
-	char buffer[12];
-	read(fd, buffer, 12);
+static rdf_term_t* _readterm(triplestore_t* t, char* buffer, int* length) {
+	int l	= 12;
 	rdf_term_type_t type	= (rdf_term_type_t) ntohl(*((uint32_t*) &(buffer[0])));
 	uint32_t extra_int		= ntohl(*((uint32_t*) &(buffer[4])));
 	uint32_t vlen			= ntohl(*((uint32_t*) &(buffer[8])));
 	char* value				= calloc(1, 1+vlen);
-	read(fd, value, vlen+1);
+	memcpy(value, buffer+l, vlen+1);
+	l	+= vlen+1;
 	
 	char* value_type		= NULL;
 	uint32_t value_id		= 0;
 	if (type == TERM_LANG_LITERAL) {
 		value_type	= calloc(1, 1+extra_int);
-		read(fd, value_type, 1+extra_int);
+		memcpy(value_type, buffer+l, 1+extra_int);
+		l	+= extra_int+1;
 	} else if (type == TERM_TYPED_LITERAL) {
 		value_id	= extra_int;
 	}
+	
+	*length	= l;
 	return triplestore_new_term(t, type, value, value_type, value_id);
 }
 
@@ -340,16 +351,16 @@ int _triplestore_dump_node(int fd, graph_node_t* node) {
 	return 0;
 }
 
-int _triplestore_load_node(triplestore_t* t, int fd, int i, graph_node_t* node) {
-	char buffer[24];
-	read(fd, buffer, 24);
+int _triplestore_load_node(triplestore_t* t, char* buffer, int i, graph_node_t* node) {
 	node->mtime			= *((uint64_t*) &(buffer[0]));
 	node->out_degree	= ntohl(*((uint32_t*) &(buffer[8])));
 	node->in_degree		= ntohl(*((uint32_t*) &(buffer[12])));
 	node->out_edge_head	= ntohl(*((uint32_t*) &(buffer[16])));
 	node->in_edge_head	= ntohl(*((uint32_t*) &(buffer[20])));
-	node->_term			= _readterm(t, fd);
-	return 0;
+	
+	int termsize		= 0;
+	node->_term			= _readterm(t, buffer+24, &termsize);
+	return 24 + termsize;
 }
 
 int triplestore_dump(triplestore_t* t, const char* filename) {
@@ -376,6 +387,7 @@ int triplestore_dump(triplestore_t* t, const char* filename) {
 
 int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	double start	= triplestore_current_time();
+	
 	int fd	= open(filename, O_RDONLY);
 	if (fd == -1) {
 		perror("failed to open file for loading triplestore");
@@ -391,19 +403,29 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
 	
-	char buffer[20];
-	read(fd, buffer, 20);
+
+	struct stat fs;
+	fstat(fd, &fs);
+// 	fprintf(stderr, "Mapping file of %d bytes\n", (int) fs.st_size);
+	void* m	= mmap(NULL, fs.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	if (m == MAP_FAILED) {
+		perror("Failed to mmap file");
+		close(fd);
+		return 1;
+	}
 	
-	char* ptr	= buffer;
-	if (strncmp(ptr, "3STR", 4)) {
+	char* mp	= (char*) m;
+	if (strncmp(mp, "3STR", 4)) {
 		fprintf(stderr, "Bad cookie\n");
 		return 1;
 	}
 	
-// 	uint32_t ealloc	= ntohl(*((uint32_t*) &(buffer[4])));
-	uint32_t edges	= ntohl(*((uint32_t*) &(buffer[8])));
-// 	uint32_t nalloc	= ntohl(*((uint32_t*) &(buffer[12])));
-	uint32_t nodes	= ntohl(*((uint32_t*) &(buffer[16])));
+// 	uint32_t ealloc	= ntohl(*((uint32_t*) &(mp[4])));
+	uint32_t edges	= ntohl(*((uint32_t*) &(mp[8])));
+// 	uint32_t nalloc	= ntohl(*((uint32_t*) &(mp[12])));
+	uint32_t nodes	= ntohl(*((uint32_t*) &(mp[16])));
+
+	mp	+= 20;
 
 	t->nodes_alloc	= nodes;
 	t->nodes_used	= nodes;
@@ -414,17 +436,17 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	t->graph				= calloc(sizeof(graph_node_t), 1+nodes);
 	for (uint32_t i = 1; i <= nodes; i++) {
 		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
-		_triplestore_load_node(t, fd, i, &(t->graph[i]));
+		int length	= _triplestore_load_node(t, mp, i, &(t->graph[i]));
 		item->_term	= t->graph[i]._term;
 		item->id	= i;
 		avl_insert( t->dictionary, item );
+		mp	+= length;
 // 		fprintf(stderr, "Loaded term (%"PRIu32") %s\n", i, triplestore_term_to_string(t, t->graph[i]._term));
 	}
 
 	t->edges		= calloc(sizeof(index_list_element_t), 1+edges);
-	read(fd, &(t->edges[1]), 20 * edges);
+	memcpy(&(t->edges[1]), mp, 20*edges);
 	for (uint32_t i = 1; i <= edges; i++) {
-// 		_triplestore_load_edge(fd, i, &(t->edges[i]));
 		t->edges[i].s			= ntohl(t->edges[i].s);
 		t->edges[i].p			= ntohl(t->edges[i].p);
 		t->edges[i].o			= ntohl(t->edges[i].o);
@@ -445,6 +467,9 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 // 		}
 // 	}
 
+	munmap(m, fs.st_size);
+	close(fd);
+	
 	if (verbose) {
 		double elapsed	= triplestore_elapsed_time(start);
 		fprintf( stderr, "Finished loading %"PRIu32" triples in %lgs (%5.1f triples/second)\n", edges, elapsed, ((double)edges/elapsed) );
