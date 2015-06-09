@@ -140,6 +140,16 @@ typedef struct triplestore_s {
 	graph_node_t* graph;
 	
 	struct avl_table* dictionary;
+	
+	
+	pcre* decimal_re;
+	pcre* integer_re;
+	pcre* float_re;
+	pcre* date_re;
+	pcre* datetime_re;
+	
+	int verify_datatypes;
+	
 } triplestore_t;
 
 double triplestore_current_time ( void );

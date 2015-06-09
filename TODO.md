@@ -3,7 +3,6 @@ TODO
 
 * Update term sorting code to use SPARQL comparison rules
 * Translate document-scoped bnode IDs to unique IDs on import
-* Perform simple lexical verification/canonicalization on input for known D-types (numerics, dates)
 * Implement simple filtering over BGP matching (1-variable SARGs plus simple 2-variable ops)
     * Numeric logical testing (var, const)
     * Date logical testing (var, const)
@@ -28,6 +27,7 @@ TODO
 Done
 ====
 
+* Perform simple lexical verification/canonicalization on input for known D-types (numerics, dates)
 * Add support for property paths to AtteanX::Store::MemoryTripleStore::Query
 * Ensure arguments are argument compatible for string filter functions.
 * Add native numeric slot in rdf_term_t to allow native numeric operations

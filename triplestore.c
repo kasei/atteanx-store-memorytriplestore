@@ -55,6 +55,22 @@ double triplestore_elapsed_time ( double start ) {
 #pragma mark -
 #pragma mark RDF Terms
 
+static int _value_matches_regex(const char* value, pcre* re) {
+	int OVECCOUNT	= 30;
+	int ovector[OVECCOUNT];
+	int rc = pcre_exec(
+					   re,							/* the compiled pattern */
+					   NULL,						/* no extra data - we didn't study the pattern */
+					   value,						/* the subject string */
+					   (int) strlen(value),			/* the length of the subject */
+					   0,							/* start at offset 0 in the subject */
+					   0,							/* default options */
+					   ovector,						/* output vector for substring information */
+					   OVECCOUNT					/* number of elements in the output vector */
+					   );
+	return (rc > 0);
+}
+
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
 	char* v				= malloc(sizeof(rdf_term_t) + strlen(value) + 1);
@@ -65,7 +81,10 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 	strcpy(term->value, value);
 	
 	if (vtype) {
-		assert(strlen(vtype) < 8);
+		if (strlen(vtype) >= 8) {
+			fprintf(stderr, "*** Language tag is too long: %s\n", vtype);
+			return NULL;
+		}
 		term->vtype.value_type	= 0;
 		strcpy((char*) &(term->vtype.value_type), vtype);
 // 		term->vtype.value_type	= calloc(1, 1+strlen(vtype));
@@ -82,12 +101,33 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 				if (!strncmp(dt->value, "http://www.w3.org/2001/XMLSchema#", 33)) {
 					char* type	= dt->value + 33;
 					if (!strcmp(type, "integer")) {
+						if (t->verify_datatypes) {
+							if (!_value_matches_regex(term->value, t->integer_re)) {
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								free(v);
+								return NULL;
+							}
+						}
 						term->is_numeric	= 1;
 						term->numeric_value	= (double) atoll(term->value);
 					} else if (!strcmp(type, "decimal")) {
+						if (t->verify_datatypes) {
+							if (!_value_matches_regex(term->value, t->decimal_re)) {
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								free(v);
+								return NULL;
+							}
+						}
 						term->is_numeric	= 1;
 						term->numeric_value	= (double) atof(term->value);
 					} else if (!strcmp(type, "float") || !strcmp(type, "double")) {
+						if (t->verify_datatypes) {
+							if (!_value_matches_regex(term->value, t->float_re)) {
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								free(v);
+								return NULL;
+							}
+						}
 // 						fprintf(stderr, "--------\n");
 // 						char* ss		= triplestore_term_to_string(t, term);
 // 						fprintf(stderr, "typed literal: %s\n", ss);
@@ -95,6 +135,22 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 
 						term->is_numeric	= 1;
 						term->numeric_value	= (double) atof(term->value);
+					} else if (!strcmp(type, "dateTime")) {
+						if (t->verify_datatypes) {
+							if (!_value_matches_regex(term->value, t->datetime_re)) {
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								free(v);
+								return NULL;
+							}
+						}
+					} else if (!strcmp(type, "date")) {
+						if (t->verify_datatypes) {
+							if (!_value_matches_regex(term->value, t->date_re)) {
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								free(v);
+								return NULL;
+							}
+						}
 					}
 				}
 			}
@@ -229,6 +285,7 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	t->nodes_alloc	= max_nodes;
 	t->edges_used	= 0;
 	t->nodes_used	= 0;
+	t->verify_datatypes	= 0;
 // 	fprintf(stderr, "allocating %d bytes for %"PRIu32" edges\n", max_edges * sizeof(index_list_element_t), max_edges);
 	t->edges		= calloc(sizeof(index_list_element_t), max_edges);
 	if (t->edges == NULL) {
@@ -243,10 +300,73 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 		return NULL;
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
+	
+	const char *error;
+	int erroffset;
+	t->integer_re		= pcre_compile(
+									   "^[-+]?(\\d+)$",	/* the pattern */
+									   0,							/* default options */
+									   &error,						/* for error message */
+									   &erroffset,					/* for error offset */
+									   NULL							/* use default character tables */
+									   );
+	if (t->integer_re == NULL) {
+		fprintf(stderr,"PCRE compilation failed for integer at offset %d: %s\n", erroffset, error);
+		exit(1);
+	}
+	t->decimal_re		= pcre_compile(
+									   "^[-+]?(\\d+)([.](\\d+))?$",	/* the pattern */
+									   0,							/* default options */
+									   &error,						/* for error message */
+									   &erroffset,					/* for error offset */
+									   NULL							/* use default character tables */
+									   );
+	if (t->decimal_re == NULL) {
+		fprintf(stderr,"PCRE compilation failed for decimal at offset %d: %s\n", erroffset, error);
+		exit(1);
+	}
+	t->float_re			= pcre_compile(
+									   "^(NaN|-?INF|[-+]?(\\d+)[.](\\d+)([eE][-+]?(\\d+))?)$",	/* the pattern */
+									   0,							/* default options */
+									   &error,						/* for error message */
+									   &erroffset,					/* for error offset */
+									   NULL							/* use default character tables */
+									   );
+	if (t->float_re == NULL) {
+		fprintf(stderr,"PCRE compilation failed for float at offset %d: %s\n", erroffset, error);
+		exit(1);
+	}
+	t->datetime_re		= pcre_compile(
+									   "^(-?\\d{4})-(\\d\\d)-(\\d\\d)T(\\d\\d):(\\d\\d):(\\d\\d([.]\\d+)?)(Z|[-+](\\d\\d):(\\d\\d))?$",	/* the pattern */
+									   0,							/* default options */
+									   &error,						/* for error message */
+									   &erroffset,					/* for error offset */
+									   NULL							/* use default character tables */
+									   );
+	if (t->datetime_re == NULL) {
+		fprintf(stderr,"PCRE compilation failed for datetime at offset %d: %s\n", erroffset, error);
+		exit(1);
+	}
+	t->date_re			= pcre_compile(
+									   "^(-?\\d{4})-(\\d\\d)-(\\d\\d)$",	/* the pattern */
+									   0,							/* default options */
+									   &error,						/* for error message */
+									   &erroffset,					/* for error offset */
+									   NULL							/* use default character tables */
+									   );
+	if (t->date_re == NULL) {
+		fprintf(stderr,"PCRE compilation failed for datetime at offset %d: %s\n", erroffset, error);
+		exit(1);
+	}
 	return t;
 }
 
 int free_triplestore(triplestore_t* t) {
+	pcre_free(t->integer_re);
+	pcre_free(t->decimal_re);
+	pcre_free(t->float_re);
+	pcre_free(t->date_re);
+	pcre_free(t->datetime_re);
 	avl_destroy(t->dictionary, _hx_free_node_item);
 	free(t->edges);
 	free(t->graph);
@@ -1311,6 +1431,9 @@ nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm) {
 }
 
 nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
+	if (!myterm) {
+		return 0;
+	}
 	hx_nodemap_item i;
 	i._term			= myterm;
 	i.id			= 0;
@@ -1319,7 +1442,7 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 		if ((1+t->nodes_used) >= t->nodes_alloc) {
 			if (triplestore_expand_nodes(t)) {
 				fprintf(stderr, "*** Exhausted allocated space for nodes.\n");
-				return 1;
+				return 0;
 			}
 		}
 
@@ -1349,6 +1472,10 @@ static void parser_handle_triple (void* user_data, raptor_statement* triple) {
 	nodeid_t s	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->subject));
 	nodeid_t p	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->predicate));
 	nodeid_t o	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->object));
+	if (s == 0 || p == 0 || o == 0) {
+// 		pctx->error++;
+		return;
+	}
 	if (triplestore_add_triple(pctx->store, s, p, o, pctx->timestamp)) {
 		pctx->error++;
 		return;
@@ -1375,6 +1502,8 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 	
 	raptor_parser_set_statement_handler(rdf_parser, pctx, parser_handle_triple);
 	
+	int verify	= pctx->store->verify_datatypes;
+	pctx->store->verify_datatypes	= 1;
 // 	if (1) {
 		int fd	= open(filename, O_RDONLY);
 // 		fcntl(fd, F_NOCACHE, 1);
@@ -1390,9 +1519,10 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 		fprintf( stderr, "\nError encountered during parsing\n" );
 	} else if (pctx->verbose) {
 		double elapsed	= triplestore_elapsed_time(pctx->start);
-		fprintf( stderr, "\nFinished parsing %"PRIu64" triples in %lfs\n", pctx->count, elapsed );
+		fprintf( stderr, "\nFinished parsing %"PRIu64" triples in %lfs\n", (uint64_t) pctx->store->edges_used, elapsed );
 	}
 	
+	pctx->store->verify_datatypes	= verify;
 	free(uri_string);
 	raptor_free_parser(rdf_parser);
 	raptor_free_uri( base_uri );

@@ -11,6 +11,17 @@ data to load. The triple store links with libraptor2 to allow fast parsing of
 input RDF files.
 
 
+Format Restrictions
+---
+
+There are several restrictions on the RDF data that is allowed by the system:
+
+* Language tags have a maximum length of 7 characters. This likely restricts
+  real-world data to plain languages ("en"), language and script ("mn-Cyrl"),
+  or langauge and region ("de-CH").
+* Numeric and date typed literals must be in a valid lexical form.
+
+
 Perl Example
 ---
 
