@@ -56,19 +56,20 @@ double triplestore_elapsed_time ( double start ) {
 #pragma mark RDF Terms
 
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
-	char* v				= calloc(1, sizeof(rdf_term_t) + strlen(value) + 1);
-	rdf_term_t* term	= (rdf_term_t*) (v + 1 + strlen(value));
-	term->value			= v;
-// 	rdf_term_t* term	= calloc(sizeof(rdf_term_t), 1);
+	// the rdf_term_t struct and main string payload are placed into the same memory block
+	char* v				= malloc(sizeof(rdf_term_t) + strlen(value) + 1);
+	rdf_term_t* term	= (rdf_term_t*) v;
+	term->value			= v + sizeof(rdf_term_t);
 	term->type			= type;
-// 	term->value			= calloc(1, 1+strlen(value));
+	term->is_numeric	= 0;
 	strcpy(term->value, value);
 	
 	if (vtype) {
-		fprintf(stderr, "term size: %d\n", (int) sizeof(rdf_term_t));
 		assert(strlen(vtype) < 8);
-		term->vtype.value_type	= calloc(1, 1+strlen(vtype));
-		strcpy(term->vtype.value_type, vtype);
+		term->vtype.value_type	= 0;
+		strcpy((char*) &(term->vtype.value_type), vtype);
+// 		term->vtype.value_type	= calloc(1, 1+strlen(vtype));
+// 		strcpy(term->vtype.value_type, vtype);
 	} else {
 		term->vtype.value_id	= vid;
 		if (vid > 0) {
@@ -114,11 +115,13 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 }
 
 void free_rdf_term(rdf_term_t* t) {
-	if (t->type == TERM_LANG_LITERAL) {
-		free(t->vtype.value_type);
-	}
-	free(t->value);
-// 	free(t);
+// 	if (t->type == TERM_LANG_LITERAL) {
+// 		free(t->vtype.value_type);
+// 	}
+
+	// t is the head of the single memory block for both the term struct and the string payload
+// 	free(t->value);
+	free(t);
 }
 
 int triplestore_size(triplestore_t* t) {
@@ -130,9 +133,10 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	if (b == NULL) return 1;
 	if (a->type == b->type) {
 		if (a->type == TERM_LANG_LITERAL) {
-			int r	= strcmp(a->vtype.value_type, b->vtype.value_type);
-			if (r) {
-				return r;
+			int64_t alang	= a->vtype.value_type;
+			int64_t blang	= b->vtype.value_type;
+			if (alang != blang) {
+				return (alang - blang);
 			}
 		} else if (a->type == TERM_TYPED_LITERAL) {
 			if (a->vtype.value_id != b->vtype.value_id) {
@@ -170,8 +174,8 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 			break;
 		case TERM_LANG_LITERAL:
 			// TODO: handle escaping
-			string	= calloc(4+strlen(t->value)+strlen(t->vtype.value_type), 1);
-			sprintf(string, "\"%s\"@%s", t->value, t->vtype.value_type);
+			string	= calloc(4+strlen(t->value)+strlen((char*) &(t->vtype.value_type)), 1);
+			sprintf(string, "\"%s\"@%s", t->value, (char*) &(t->vtype.value_type));
 			break;
 		case TERM_TYPED_LITERAL:
 			// TODO: handle escaping
@@ -287,7 +291,7 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	uint32_t type	= (uint32_t) term->type;
 	uint32_t extra_int	= 0;
 	if (type == TERM_LANG_LITERAL) {
-		extra_int	= strlen(term->vtype.value_type);
+		extra_int	= strlen((char*) &(term->vtype.value_type));
 	} else if (type == TERM_TYPED_LITERAL) {
 		extra_int	= term->vtype.value_id;
 	}
@@ -300,7 +304,7 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	write(fd, buffer, 12);
 	write(fd, term->value, 1+vlen);
 	if (type == TERM_LANG_LITERAL) {
-		write(fd, term->vtype.value_type, 1+extra_int);
+		write(fd, &(term->vtype.value_type), 1+extra_int);
 	}
 	return 0;
 }
@@ -687,7 +691,7 @@ int _filter_args_are_term_compatible(query_filter_t* filter, rdf_term_t* term) {
 		return (term->type == TERM_XSDSTRING_LITERAL);
 	} else if (filter->string2_type == TERM_LANG_LITERAL && term->type == TERM_LANG_LITERAL) {
 		char* filter_lang	= filter->string2_lang;
-		char* term_lang		= term->vtype.value_type;
+		char* term_lang		= (char*) &(term->vtype.value_type);
 		return !strcmp(filter_lang, term_lang);
 	}
 	return 0;

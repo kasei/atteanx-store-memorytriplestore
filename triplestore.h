@@ -55,8 +55,8 @@ typedef struct rdf_term_s {
 	rdf_term_type_t type;
 	char* value;
 	union {
-		uint32_t value_id;
-		char* value_type;
+		int64_t value_id;
+		int64_t value_type;	// a 1-7 char string plus trailing NULL is going to be packed into this integer
 	} vtype;
 	int is_numeric;
 	double numeric_value;
