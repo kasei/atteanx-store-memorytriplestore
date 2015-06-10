@@ -810,6 +810,20 @@ int main (int argc, char** argv) {
 	}
 
 	triplestore_op(t, &ctx, argc-i, &(argv[i]));
+
+	if (0) {
+		fprintf(stderr, "Running test op sequence...\n");
+		triplestore_vop(t, &ctx, 2, "load", "test.db");
+		triplestore_vop(t, &ctx, 2, "import", "test2.ttl");
+// 		triplestore_vop(t, &ctx, 1, "ntriples");
+// 		triplestore_vop(t, &ctx, 1, "begin");
+// 		triplestore_vop(t, &ctx, 4, "bgp", "s", "p", "o");
+// 		triplestore_vop(t, &ctx, 2, "project", "p");
+// 		triplestore_vop(t, &ctx, 1, "unique");
+// 		triplestore_vop(t, &ctx, 1, "end");
+// 		exit(0);
+	}
+	
 	
 	char* line;
 	while ((line = linenoise("ts> ")) != NULL) {
@@ -833,15 +847,6 @@ int main (int argc, char** argv) {
 		free(buffer);
 	}
 	linenoiseHistorySave(linenoiseHistoryFile);
-
-	if (0) {
-		fprintf(stderr, "Running test op sequence...\n");
-		triplestore_vop(t, &ctx, 1, "begin");
-		triplestore_vop(t, &ctx, 4, "bgp", "s", "p", "o");
-		triplestore_vop(t, &ctx, 2, "project", "p");
-		triplestore_vop(t, &ctx, 1, "unique");
-		triplestore_vop(t, &ctx, 1, "end");
-	}
 	
 	free_triplestore(t);
 	return 0;

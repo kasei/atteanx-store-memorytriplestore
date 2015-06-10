@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -16,6 +17,7 @@
 
 struct parser_ctx_s {
 	int verbose;
+	int bnode_prefix;
 // 	int print;
 	int error;
 	int64_t limit;
@@ -91,7 +93,11 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 // 		strcpy(term->vtype.value_type, vtype);
 	} else {
 		term->vtype.value_id	= vid;
-		if (vid > 0) {
+		if (type == TERM_BLANK) {
+			if (vid > t->bnode_prefix) {
+				t->bnode_prefix	= vid;
+			}
+		} else if (type == TERM_TYPED_LITERAL) {
 // 			char* ss		= triplestore_term_to_string(t, term);
 // 			fprintf(stderr, "typed literal: %s\n", ss);
 // 			free(ss);
@@ -198,6 +204,10 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 			if (a->vtype.value_id != b->vtype.value_id) {
 				return (a->vtype.value_id - b->vtype.value_id);
 			}
+		} else if (a->type == TERM_BLANK) {
+			if (a->vtype.value_id != b->vtype.value_id) {
+				return (a->vtype.value_id - b->vtype.value_id);
+			}
 		}
 		
 		return strcmp(a->value, b->value);
@@ -220,8 +230,8 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 			sprintf(string, "<%s>", t->value);
 			break;
 		case TERM_BLANK:
-			string	= calloc(3+strlen(t->value), 1);
-			sprintf(string, "_:%s", t->value);
+			string	= calloc(12+strlen(t->value), 1);
+			sprintf(string, "_:b%"PRIu32"b%s", (uint32_t) t->vtype.value_id, t->value);
 			break;
 		case TERM_XSDSTRING_LITERAL:
 			string	= calloc(3+strlen(t->value), 1);
@@ -281,11 +291,12 @@ static void _hx_free_node_item (void *avl_item, void *avl_param) {
 
 triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	triplestore_t* t	= (triplestore_t*) calloc(sizeof(triplestore_t), 1);
-	t->edges_alloc	= max_edges;
-	t->nodes_alloc	= max_nodes;
-	t->edges_used	= 0;
-	t->nodes_used	= 0;
+	t->edges_alloc		= max_edges;
+	t->nodes_alloc		= max_nodes;
+	t->edges_used		= 0;
+	t->nodes_used		= 0;
 	t->verify_datatypes	= 0;
+	t->bnode_prefix		= 0;
 // 	fprintf(stderr, "allocating %d bytes for %"PRIu32" edges\n", max_edges * sizeof(index_list_element_t), max_edges);
 	t->edges		= calloc(sizeof(index_list_element_t), max_edges);
 	if (t->edges == NULL) {
@@ -414,6 +425,8 @@ static int _writeterm(int fd, rdf_term_t* term) {
 		extra_int	= strlen((char*) &(term->vtype.value_type));
 	} else if (type == TERM_TYPED_LITERAL) {
 		extra_int	= term->vtype.value_id;
+	} else if (type == TERM_BLANK) {
+		extra_int	= term->vtype.value_id;
 	}
 	
 	char buffer[12];
@@ -434,17 +447,17 @@ static rdf_term_t* _readterm(triplestore_t* t, char* buffer, int* length) {
 	rdf_term_type_t type	= (rdf_term_type_t) ntohl(*((uint32_t*) &(buffer[0])));
 	uint32_t extra_int		= ntohl(*((uint32_t*) &(buffer[4])));
 	uint32_t vlen			= ntohl(*((uint32_t*) &(buffer[8])));
-	char* value				= calloc(1, 1+vlen);
-	memcpy(value, buffer+l, vlen+1);
+	char* value				= buffer+l;
 	l	+= vlen+1;
 	
 	char* value_type		= NULL;
 	uint32_t value_id		= 0;
 	if (type == TERM_LANG_LITERAL) {
-		value_type	= calloc(1, 1+extra_int);
-		memcpy(value_type, buffer+l, 1+extra_int);
+		value_type	= buffer+l;
 		l	+= extra_int+1;
 	} else if (type == TERM_TYPED_LITERAL) {
+		value_id	= extra_int;
+	} else if (type == TERM_BLANK) {
 		value_id	= extra_int;
 	}
 	
@@ -484,6 +497,9 @@ int _triplestore_load_node(triplestore_t* t, char* buffer, int i, graph_node_t* 
 	
 	int termsize		= 0;
 	node->_term			= _readterm(t, buffer+24, &termsize);
+	if (node->_term == NULL) {
+		fprintf(stderr, "Failed to load term\n");
+	}
 	return 24 + termsize;
 }
 
@@ -518,15 +534,14 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 		return 1;
 	}
 	
-	free(t->edges);
-	free(t->graph);
-
 	// LOAD replaces all the triples in the store, so drop and re-create the dictionary to clear it.
 	if (t->dictionary) {
 		avl_destroy(t->dictionary, _hx_free_node_item);
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
 	
+	free(t->edges);
+	free(t->graph);
 
 	struct stat fs;
 	fstat(fd, &fs);
@@ -546,18 +561,20 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	
 // 	uint32_t ealloc	= ntohl(*((uint32_t*) &(mp[4])));
 	uint32_t edges	= ntohl(*((uint32_t*) &(mp[8])));
+	uint32_t ealloc	= (edges < 4096) ? 4096 : edges;
 // 	uint32_t nalloc	= ntohl(*((uint32_t*) &(mp[12])));
 	uint32_t nodes	= ntohl(*((uint32_t*) &(mp[16])));
+	uint32_t nalloc	= (nodes < 4096) ? 4096 : nodes;
 
 	mp	+= 20;
-
-	t->nodes_alloc	= nodes;
+	
+	t->nodes_alloc	= nalloc;
 	t->nodes_used	= nodes;
-	t->edges_alloc	= edges;
+	t->edges_alloc	= ealloc;
 	t->edges_used	= edges;
 // 	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
 	
-	t->graph				= calloc(sizeof(graph_node_t), 1+nodes);
+	t->graph				= calloc(sizeof(graph_node_t), 1+nalloc);
 	for (uint32_t i = 1; i <= nodes; i++) {
 		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
 		int length	= _triplestore_load_node(t, mp, i, &(t->graph[i]));
@@ -565,10 +582,13 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 		item->id	= i;
 		avl_insert( t->dictionary, item );
 		mp	+= length;
-// 		fprintf(stderr, "Loaded term (%"PRIu32") %s\n", i, triplestore_term_to_string(t, t->graph[i]._term));
+		
+// 		char* string	= triplestore_term_to_string(t, t->graph[i]._term);
+// 		fprintf(stderr, "Loaded term (%"PRIu32") %s\n", i, string);
+// 		free(string);
 	}
 
-	t->edges		= calloc(sizeof(index_list_element_t), 1+edges);
+	t->edges		= calloc(sizeof(index_list_element_t), 1+ealloc);
 	memcpy(&(t->edges[1]), mp, 20*edges);
 	for (uint32_t i = 1; i <= edges; i++) {
 		t->edges[i].s			= ntohl(t->edges[i].s);
@@ -1366,7 +1386,7 @@ int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o,
 		return 1;
 	}
 	
-	nodeid_t edge				= ++t->edges_used;
+	nodeid_t edge				= ++(t->edges_used);
 
 	t->edges[ edge ].s			= s;
 	t->edges[ edge ].p			= p;
@@ -1385,7 +1405,7 @@ int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o,
 	return 0;
 }
 
-static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t) {
+static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t, int bnode_prefix) {
 	// TODO: datatype IRIs should be referenced by term ID, not an IRI string (lots of wasted space)
 	char* value				= NULL;
 	char* vtype				= NULL;
@@ -1395,7 +1415,7 @@ static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t) {
 			return triplestore_new_term(store, TERM_IRI, value, NULL, 0);
 		case RAPTOR_TERM_TYPE_BLANK:
 			value	= (char*) t->value.blank.string;
-			return triplestore_new_term(store, TERM_BLANK, value, NULL, 0);
+			return triplestore_new_term(store, TERM_BLANK, value, NULL, bnode_prefix);
 		case RAPTOR_TERM_TYPE_LITERAL:
 			value	= (char*) t->value.literal.string;
 			if (t->value.literal.language) {
@@ -1469,9 +1489,9 @@ static void parser_handle_triple (void* user_data, raptor_statement* triple) {
 	
 	pctx->count++;
 
-	nodeid_t s	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->subject));
-	nodeid_t p	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->predicate));
-	nodeid_t o	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->object));
+	nodeid_t s	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->subject, pctx->bnode_prefix));
+	nodeid_t p	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->predicate, pctx->bnode_prefix));
+	nodeid_t o	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->object, pctx->bnode_prefix));
 	if (s == 0 || p == 0 || o == 0) {
 // 		pctx->error++;
 		return;
@@ -1504,22 +1524,19 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 	
 	int verify	= pctx->store->verify_datatypes;
 	pctx->store->verify_datatypes	= 1;
-// 	if (1) {
-		int fd	= open(filename, O_RDONLY);
-// 		fcntl(fd, F_NOCACHE, 1);
-// 		fcntl(fd, F_RDAHEAD, 1);
-		FILE* f	= fdopen(fd, "r");
-		raptor_parser_parse_file_stream(rdf_parser, f, filename, base_uri);
-		fclose(f);
-// 	} else {
-// 		raptor_parser_parse_file(rdf_parser, uri, base_uri);
-// 	}
+	int fd	= open(filename, O_RDONLY);
+// 	fcntl(fd, F_NOCACHE, 1);
+// 	fcntl(fd, F_RDAHEAD, 1);
+	FILE* f	= fdopen(fd, "r");
+	raptor_parser_parse_file_stream(rdf_parser, f, filename, base_uri);
+	fclose(f);
 	
 	if (pctx->error) {
 		fprintf( stderr, "\nError encountered during parsing\n" );
 	} else if (pctx->verbose) {
 		double elapsed	= triplestore_elapsed_time(pctx->start);
-		fprintf( stderr, "\nFinished parsing %"PRIu64" triples in %lfs\n", (uint64_t) pctx->store->edges_used, elapsed );
+		uint64_t count	= pctx->count;
+		fprintf( stderr, "\nFinished parsing %"PRIu64" triples in %lgs\n", count, elapsed );
 	}
 	
 	pctx->store->verify_datatypes	= verify;
@@ -1533,6 +1550,7 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 
 int triplestore__load_file(triplestore_t* t, const char* filename, int verbose) {
 	__block struct parser_ctx_s pctx	= {
+		.bnode_prefix		= ++(t->bnode_prefix),
 		.limit				= -1,
 		.error				= 0,
 		.graph				= 0LL,

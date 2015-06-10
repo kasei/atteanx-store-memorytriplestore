@@ -149,7 +149,7 @@ typedef struct triplestore_s {
 	pcre* datetime_re;
 	
 	int verify_datatypes;
-	
+	int bnode_prefix;
 } triplestore_t;
 
 double triplestore_current_time ( void );
