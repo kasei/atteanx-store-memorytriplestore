@@ -147,6 +147,7 @@ typedef struct triplestore_s {
 	pcre* float_re;
 	pcre* date_re;
 	pcre* datetime_re;
+	pcre* lang_re;
 	
 	int verify_datatypes;
 	int bnode_prefix;

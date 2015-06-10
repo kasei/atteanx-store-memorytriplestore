@@ -73,6 +73,17 @@ static int _value_matches_regex(const char* value, pcre* re) {
 	return (rc > 0);
 }
 
+static const char* _parse_results ( int rc, int pos, const char* value, int* ovector, int* result_length ) {
+	if (pos >= rc)
+		return NULL;
+	if (ovector[2*pos] == -1)
+		return NULL;
+	if (result_length)
+		*result_length	= ovector[2*pos+1] - ovector[2*pos];
+	return value + ovector[2*pos];
+}
+
+
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
 	char* v				= malloc(sizeof(rdf_term_t) + strlen(value) + 1);
@@ -87,10 +98,50 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 			fprintf(stderr, "*** Language tag is too long: %s\n", vtype);
 			return NULL;
 		}
+		
+		int OVECCOUNT	= 30;
+		int ovector[OVECCOUNT];
+		int rc = pcre_exec(
+						   t->lang_re,					/* the compiled pattern */
+						   NULL,						/* no extra data - we didn't study the pattern */
+						   vtype,						/* the subject string */
+						   (int) strlen(vtype),			/* the length of the subject */
+						   0,							/* start at offset 0 in the subject */
+						   0,							/* default options */
+						   ovector,						/* output vector for substring information */
+						   OVECCOUNT					/* number of elements in the output vector */
+						   );
+		
+		if (rc <= 0) {
+			fprintf(stderr, "*** Language tag is not a valid lexical form: '%s'\n", vtype);
+			free(v);
+			return NULL;
+		}
+		
 		term->vtype.value_type	= 0;
-		strcpy((char*) &(term->vtype.value_type), vtype);
-// 		term->vtype.value_type	= calloc(1, 1+strlen(vtype));
-// 		strcpy(term->vtype.value_type, vtype);
+
+		// Normalize the case of the language and any region/script
+		const char* lang	= _parse_results(rc, 1, vtype, ovector, NULL);
+		const char* region	= _parse_results(rc, 2, vtype, ovector, NULL);
+		const char* script	= _parse_results(rc, 3, vtype, ovector, NULL);
+		char* ptr	= (char*) &(term->vtype.value_type);
+		
+		// language is all lowercase
+		*(ptr++)	= tolower(lang[0]);
+		*(ptr++)	= tolower(lang[1]);
+		if (region) {
+			// region is all uppercase
+			*(ptr++)	= '-';
+			*(ptr++)	= toupper(region[0]);
+			*(ptr++)	= toupper(region[1]);
+		} else if (script) {
+			// script is title case
+			*(ptr++)	= '-';
+			*(ptr++)	= toupper(script[0]);
+			*(ptr++)	= tolower(script[1]);
+			*(ptr++)	= tolower(script[2]);
+			*(ptr++)	= tolower(script[3]);
+		}
 	} else {
 		term->vtype.value_id	= vid;
 		if (type == TERM_BLANK) {
@@ -109,7 +160,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 					if (!strcmp(type, "integer")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->integer_re)) {
-								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
 								free(v);
 								return NULL;
 							}
@@ -119,7 +170,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 					} else if (!strcmp(type, "decimal")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->decimal_re)) {
-								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
 								free(v);
 								return NULL;
 							}
@@ -129,7 +180,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 					} else if (!strcmp(type, "float") || !strcmp(type, "double")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->float_re)) {
-								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
 								free(v);
 								return NULL;
 							}
@@ -144,7 +195,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 					} else if (!strcmp(type, "dateTime")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->datetime_re)) {
-								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
 								free(v);
 								return NULL;
 							}
@@ -152,7 +203,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 					} else if (!strcmp(type, "date")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->date_re)) {
-								fprintf(stderr, "*** Value is not a valid lexical form for type %s: %s\n", type, term->value);
+								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
 								free(v);
 								return NULL;
 							}
@@ -289,6 +340,24 @@ static void _hx_free_node_item (void *avl_item, void *avl_param) {
 #pragma mark -
 #pragma mark Triplestore
 
+static pcre* _new_regex(const char* name, const char* pattern) {
+	const char *error;
+	int erroffset;
+	pcre* re	= pcre_compile(
+	   pattern,		/* the pattern */
+	   0,			/* default options */
+	   &error,		/* for error message */
+	   &erroffset,	/* for error offset */
+	   NULL			/* use default character tables */
+	   );
+	if (re == NULL) {
+		fprintf(stderr,"PCRE compilation failed for %s at offset %d: %s\n", name, erroffset, error);
+		exit(1);
+	}
+	return re;
+}
+
+
 triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	triplestore_t* t	= (triplestore_t*) calloc(sizeof(triplestore_t), 1);
 	t->edges_alloc		= max_edges;
@@ -312,63 +381,12 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
 	
-	const char *error;
-	int erroffset;
-	t->integer_re		= pcre_compile(
-									   "^[-+]?(\\d+)$",	/* the pattern */
-									   0,							/* default options */
-									   &error,						/* for error message */
-									   &erroffset,					/* for error offset */
-									   NULL							/* use default character tables */
-									   );
-	if (t->integer_re == NULL) {
-		fprintf(stderr,"PCRE compilation failed for integer at offset %d: %s\n", erroffset, error);
-		exit(1);
-	}
-	t->decimal_re		= pcre_compile(
-									   "^[-+]?(\\d+)([.](\\d+))?$",	/* the pattern */
-									   0,							/* default options */
-									   &error,						/* for error message */
-									   &erroffset,					/* for error offset */
-									   NULL							/* use default character tables */
-									   );
-	if (t->decimal_re == NULL) {
-		fprintf(stderr,"PCRE compilation failed for decimal at offset %d: %s\n", erroffset, error);
-		exit(1);
-	}
-	t->float_re			= pcre_compile(
-									   "^(NaN|-?INF|[-+]?(\\d+)[.](\\d+)([eE][-+]?(\\d+))?)$",	/* the pattern */
-									   0,							/* default options */
-									   &error,						/* for error message */
-									   &erroffset,					/* for error offset */
-									   NULL							/* use default character tables */
-									   );
-	if (t->float_re == NULL) {
-		fprintf(stderr,"PCRE compilation failed for float at offset %d: %s\n", erroffset, error);
-		exit(1);
-	}
-	t->datetime_re		= pcre_compile(
-									   "^(-?\\d{4})-(\\d\\d)-(\\d\\d)T(\\d\\d):(\\d\\d):(\\d\\d([.]\\d+)?)(Z|[-+](\\d\\d):(\\d\\d))?$",	/* the pattern */
-									   0,							/* default options */
-									   &error,						/* for error message */
-									   &erroffset,					/* for error offset */
-									   NULL							/* use default character tables */
-									   );
-	if (t->datetime_re == NULL) {
-		fprintf(stderr,"PCRE compilation failed for datetime at offset %d: %s\n", erroffset, error);
-		exit(1);
-	}
-	t->date_re			= pcre_compile(
-									   "^(-?\\d{4})-(\\d\\d)-(\\d\\d)$",	/* the pattern */
-									   0,							/* default options */
-									   &error,						/* for error message */
-									   &erroffset,					/* for error offset */
-									   NULL							/* use default character tables */
-									   );
-	if (t->date_re == NULL) {
-		fprintf(stderr,"PCRE compilation failed for datetime at offset %d: %s\n", erroffset, error);
-		exit(1);
-	}
+	t->integer_re		= _new_regex("integer", "^[-+]?(\\d+)$");
+	t->decimal_re		= _new_regex("decimal", "^[-+]?(\\d+)([.](\\d+))?$");
+	t->float_re			= _new_regex("float", "^(NaN|-?INF|[-+]?(\\d+)[.](\\d+)([eE][-+]?(\\d+))?)$");
+	t->date_re			= _new_regex("date", "^(-?\\d{4})-(\\d\\d)-(\\d\\d)$");
+	t->datetime_re		= _new_regex("datetime", "^(-?\\d{4})-(\\d\\d)-(\\d\\d)T(\\d\\d):(\\d\\d):(\\d\\d([.]\\d+)?)(Z|[-+](\\d\\d):(\\d\\d))?$");
+	t->lang_re			= _new_regex("langauge tag", "^(\\w{2})(?:-(?:(\\w{2})|(\\w{4})))?$");
 	return t;
 }
 
@@ -378,6 +396,7 @@ int free_triplestore(triplestore_t* t) {
 	pcre_free(t->float_re);
 	pcre_free(t->date_re);
 	pcre_free(t->datetime_re);
+	pcre_free(t->lang_re);
 	avl_destroy(t->dictionary, _hx_free_node_item);
 	free(t->edges);
 	free(t->graph);

@@ -26,6 +26,7 @@ TODO
 Done
 ====
 
+* Canonicalize language tags on input
 * Translate document-scoped bnode IDs to unique IDs on import
 * Perform simple lexical verification/canonicalization on input for known D-types (numerics, dates)
 * Add support for property paths to AtteanX::Store::MemoryTripleStore::Query
