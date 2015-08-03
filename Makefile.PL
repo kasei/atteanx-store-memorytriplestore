@@ -15,7 +15,7 @@ my $xs_files  = join(' ', glob '*.xs');
 
 my %WriteMakefileArgs	= (
     NAME							=> 'AtteanX::Store::MemoryTripleStore',
-    VERSION 						=> '0.000_02',
+    VERSION 						=> '0.000_03',
     LICENSE							=> 'gpl_2',
     MIN_PERL_VERSION				=> 5.014,
     PREREQ_PM => {
