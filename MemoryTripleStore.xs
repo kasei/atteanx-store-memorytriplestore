@@ -453,7 +453,7 @@ query__add_project (query_t* query, triplestore_t* t, AV* names)
 		char* ptr;
 	CODE:
 		project_t* project	= triplestore_new_project(t, query->variables);
-		svars	= 1 + av_top_index(names);
+		svars	= 1 + av_len(names);
 		for (int j = 0; j < svars; j++) {
 			svp	= av_fetch(names, j, 0);
 			ptr = SvPV_nolen(*svp);
@@ -475,7 +475,7 @@ query__add_sort (query_t* query, triplestore_t* t, AV* names, int unique)
 		SV** svp;
 		char* ptr;
 	CODE:
-		svars	= 1 + av_top_index(names);
+		svars	= 1 + av_len(names);
 		sort_t* sort	= triplestore_new_sort(t, query->variables, svars, unique);
 		for (int j = 0; j < svars; j++) {
 			svp	= av_fetch(names, j, 0);
