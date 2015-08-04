@@ -47,7 +47,7 @@ package AtteanX::Store::MemoryTripleStore {
 	use Scalar::Util qw(blessed);
 	
 	BEGIN {
-		our $VERSION	= '0.000_03';
+		our $VERSION	= '0.000_04';
 		XSLoader::load('AtteanX::Store::MemoryTripleStore', $VERSION);
 	}
 
