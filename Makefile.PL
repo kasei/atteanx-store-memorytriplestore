@@ -20,7 +20,6 @@ my %WriteMakefileArgs	= (
     MIN_PERL_VERSION				=> 5.014,
     PREREQ_PM => {
     	'Attean'					=> 0.005,
-    	'Moose'						=> 0,
     	'Params::Util'				=> 0,
     	'XS::Object::Magic'			=> 0,
     	'Moo'						=> 0,
