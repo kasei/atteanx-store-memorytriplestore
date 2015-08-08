@@ -861,6 +861,7 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 	int64_t node2;
 	int rc;
 	rdf_term_t* term;
+	nodeid_t tmpid;
 	int OVECCOUNT	= 30;
 	int ovector[OVECCOUNT];
 	switch (filter->type) {
@@ -899,8 +900,17 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 			}
 			break;
 		case FILTER_CONTAINS:
-			term	= t->graph[ current_match[-(filter->node1)] ]._term;
-			if (!_filter_args_are_term_compatible(filter, term)) {
+			if (filter->node1 >= 0) {
+// 				fprintf(stderr, "CONTAINS argument does not map to a variable (%"PRId64"\n", filter->node1);
+				return 0;
+			}
+			tmpid	= current_match[-(filter->node1)];
+			if (!tmpid) {
+// 				fprintf(stderr, "CONTAINS variable does not map to a term\n");
+				return 0;
+			}
+			term	= t->graph[ tmpid ]._term;
+			if (!term || !_filter_args_are_term_compatible(filter, term)) {
 				return 0;
 			}
 			if (strlen(filter->string2) == 0) {
