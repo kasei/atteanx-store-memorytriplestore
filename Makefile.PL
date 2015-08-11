@@ -40,7 +40,7 @@ $WriteMakefileArgs{depend}{'MemoryTripleStore.xs'} = "avl.o triplestore.o";
 $WriteMakefileArgs{depend}{'triplestore.c'} = "triplestore.h avl.h avl.c";
 $WriteMakefileArgs{depend}{'avl.c'} = "avl.h";
 
-my @CCFLAGS	= ('-g', '-fblocks');
+my @CCFLAGS	= ('-g', '-fblocks', '-fno-stack-protector');
 
 $WriteMakefileArgs{CCFLAGS}	.= join(' ', '', @CCFLAGS);
 
