@@ -2,6 +2,13 @@ use ExtUtils::MakeMaker;
 use ExtUtils::Depends;
 use ExtUtils::PkgConfig;
 
+BEGIN {
+	# indicate for CPAN testers that we do not support FreeBSD
+	if ($^O eq "FreeBSD") {
+		die "OS unsupported\n";
+	}
+}
+
 my %raptor	= ExtUtils::PkgConfig->find('raptor2');
 my %pcre	= ExtUtils::PkgConfig->find('libpcre');
 my $deps 	= ExtUtils::Depends->new('AtteanX::Store::MemoryTripleStore', 'XS::Object::Magic');
