@@ -1596,37 +1596,73 @@ int triplestore__load_file(triplestore_t* t, const char* filename, int verbose) 
 #pragma mark -
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o)) {
-	// TODO: check for repeated variables used to filter results
-	//       e.g. (-1, 0, -1) for all triples where subject == object
+	int(^repeated_vars_ok)(nodeid_t s, nodeid_t p, nodeid_t o)	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return 1; };
+	
 	if (_s > 0) {
+		if (_p < 0 && _p == _o) {
+			repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){
+				return (p == o);
+			};
+		}
+		fprintf(stderr, "s: %"PRId64"\n", _s);
+		if ((_s-1) >= t->nodes_used) {
+			return 1;
+		}
 		nodeid_t idx	= t->graph[_s].out_edge_head;
 		while (idx != 0) {
 			nodeid_t p	= t->edges[idx].p;
 			nodeid_t o	= t->edges[idx].o;
 			if (_p <= 0 || _p == p) {
 				if (_o <= 0 || _o == o) {
-					if (block(t, _s, p, o)) {
-						return 1;
+					if (repeated_vars_ok(_s, p, o)) {
+						if (block(t, _s, p, o)) {
+							return 1;
+						}
 					}
 				}
 			}
 			idx			= t->edges[idx].next_out;
 		}
 	} else if (_o > 0) {
+		if (_p < 0 && _p == _s) {
+			repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){
+				return (p == s);
+			};
+		}
+		if ((_o-1) >= t->nodes_used) {
+			return 1;
+		}
 		nodeid_t idx	= t->graph[_o].in_edge_head;
 		while (idx != 0) {
 			nodeid_t p	= t->edges[idx].p;
 			nodeid_t s	= t->edges[idx].s;
 			if (_p <= 0 || _p == p) {
 				if (_s <= 0 || _s == s) {
-					if (block(t, s, p, _o)) {
-						return 1;
+					if (repeated_vars_ok(s, p, _o)) {
+						if (block(t, s, p, _o)) {
+							return 1;
+						}
 					}
 				}
 			}
 			idx			= t->edges[idx].next_in;
 		}
 	} else {
+		if (_p < 0) {
+			if (_p == _s && _p == _o) {
+				repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (p == s && p == o); };
+			} else if (_p == _s) {
+				repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (p == s); };
+			} else if (_p == _o) {
+				repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (p == o); };
+			} else if (_s == _o) {
+				fprintf(stderr, "Need to verify subject == object\n");
+				repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (s == o); };
+			}
+		} else if (_s < 0 && _s == _o) {
+			fprintf(stderr, "Need to verify subject == object\n");
+			repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (o == s); };
+		}
 		for (nodeid_t s = 1; s <= t->nodes_used; s++) {
 			if (_s <= 0 || _s == s) {
 				nodeid_t idx	= t->graph[s].out_edge_head;
@@ -1635,8 +1671,10 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 					nodeid_t o	= t->edges[idx].o;
 					if (_p <= 0 || _p == p) {
 						if (_o <= 0 || _o == o) {
-							if (block(t, s, p, o)) {
-								return 1;
+							if (repeated_vars_ok(s, p, o)) {
+								if (block(t, s, p, o)) {
+									return 1;
+								}
 							}
 						}
 					}

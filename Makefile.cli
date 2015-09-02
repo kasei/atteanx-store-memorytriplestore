@@ -8,16 +8,25 @@ ifeq ($(UNAME_S),Darwin)
 	CFLAGS += -std=c11
 endif
 
-CC		= clang
+CC		?= clang
 
 %.o: %.h %.c
+
+all: ts runner server
 
 ts: ts.c triplestore.o avl.o linenoise.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o
 
+runner: runner.c triplestore.o avl.o linenoise.o
+	$(CC) $(LDLIBS) $(CFLAGS) -o runner runner.c triplestore.o avl.o linenoise.o
+
+server: server.c triplestore.o avl.o linenoise.o triplestore-server.o
+	$(CC) $(LDLIBS) $(CFLAGS) -o server server.c triplestore.o avl.o linenoise.o triplestore-server.o
+
 clean:
 	rm -f ts
-	rm -f avl.o linenoise.o triplestore.o
+	rm -f server
+	rm -f avl.o linenoise.o triplestore.o triplestore-server.o
 	rm -rf *.dSYM
 
-.PHONY	: clean
+.PHONY	: clean all
