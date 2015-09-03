@@ -15,6 +15,7 @@
 
 struct server_runtime_ctx_s {
 	int error;
+	char* error_message;
 	double start;
 	query_t* query;
 	int constructing;

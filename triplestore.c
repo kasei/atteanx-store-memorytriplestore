@@ -666,7 +666,9 @@ uint32_t* triplestore_table_row_ptr(table_t* table, int row) {
 int triplestore_table_add_row(table_t* table, nodeid_t* result) {
 	if (table->used == table->alloc) {
 		table->alloc	*= 2;
-		table->ptr	= realloc(table->ptr, table->alloc * (1+table->width) * sizeof(nodeid_t));
+		size_t requested	= table->alloc * (1+table->width) * sizeof(nodeid_t);
+		fprintf(stderr, "Reallocating to %zu bytes (currently have %d rows)\n", requested, table->used);
+		table->ptr	= realloc(table->ptr, requested);
 		if (table->ptr == NULL) {
 			fprintf(stderr, "failed to grow table size\n");
 			return 1;
@@ -696,6 +698,13 @@ int _table_row_cmp(void* thunk, const void* a, const void* b) {
 #else
 int _table_row_cmp(const void* a, const void* b, void* thunk) {
 #endif
+	if (!a) {
+		return 1;
+	}
+	if (!b) {
+		return -1;
+	}
+	
 	struct _sort_s* s	= (struct _sort_s*) thunk;
 	triplestore_t* t	= s->t;
 	sort_t* sort		= s->sort;
@@ -1372,6 +1381,9 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 	query_op_t* op		= query->head;
 	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
 	free(current_match);
+	if (r) {
+		return r;
+	}
 	
 	// go through the operation sequence and re-start flow of results from any materialized tables
 	while (1) {
@@ -1604,7 +1616,6 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 				return (p == o);
 			};
 		}
-		fprintf(stderr, "s: %"PRId64"\n", _s);
 		if ((_s-1) >= t->nodes_used) {
 			return 1;
 		}
