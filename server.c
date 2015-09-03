@@ -52,8 +52,8 @@ int main (int argc, char** argv) {
 		const char* ttlsuffix	= strstr(filename, ".ttl");
 		
 		int db_file		= (dbsuffix && !strcmp(dbsuffix, ".db"));
-		int nt_file		= (ntsuffix && !strcmp(dbsuffix, ".nt"));
-		int ttl_file	= (ttlsuffix && !strcmp(dbsuffix, ".ttl"));
+		int nt_file		= (ntsuffix && !strcmp(ntsuffix, ".nt"));
+		int ttl_file	= (ttlsuffix && !strcmp(ttlsuffix, ".ttl"));
 		
 		
 		if (db_file) {
@@ -76,6 +76,7 @@ int main (int argc, char** argv) {
 	triplestore_server_t* server	= triplestore_new_server(port, use_http);
 	signal(SIGPIPE, SIG_IGN);
 	triplestore_run_server(server, t);
+	triplestore_free_server(server);
 	free_triplestore(t);
 	return 0;
 }

@@ -18,7 +18,7 @@
 struct parser_ctx_s {
 	int verbose;
 	int bnode_prefix;
-// 	int print;
+//	int print;
 	int error;
 	int64_t limit;
 	uint64_t count;
@@ -43,15 +43,15 @@ double triplestore_current_time ( void ) {
 double triplestore_elapsed_time ( double start ) {
 	struct timeval t;
 	gettimeofday (&t, NULL);
-	double time	= t.tv_sec + (t.tv_usec / 1000000.0);
+	double time = t.tv_sec + (t.tv_usec / 1000000.0);
 	double elapsed	= time - start;
 	return elapsed;
 }
 
 // static void __indent(FILE* f, int depth) {
-// 	for (int x = 0; x < depth; x++) {
-// 		fprintf(f, "\t");
-// 	}
+//	for (int x = 0; x < depth; x++) {
+//		fprintf(f, "\t");
+//	}
 // }
 
 #pragma mark -
@@ -146,12 +146,12 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 		term->vtype.value_id	= vid;
 		if (type == TERM_BLANK) {
 			if (vid > t->bnode_prefix) {
-				t->bnode_prefix	= vid;
+				t->bnode_prefix = vid;
 			}
 		} else if (type == TERM_TYPED_LITERAL) {
-// 			char* ss		= triplestore_term_to_string(t, term);
-// 			fprintf(stderr, "typed literal: %s\n", ss);
-// 			free(ss);
+//			char* ss		= triplestore_term_to_string(t, term);
+//			fprintf(stderr, "typed literal: %s\n", ss);
+//			free(ss);
 
 			rdf_term_t* dt	= t->graph[ vid ]._term;
 			if (dt) {
@@ -166,7 +166,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 							}
 						}
 						term->is_numeric	= 1;
-						term->numeric_value	= (double) atoll(term->value);
+						term->numeric_value = (double) atoll(term->value);
 					} else if (!strcmp(type, "decimal")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->decimal_re)) {
@@ -176,7 +176,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 							}
 						}
 						term->is_numeric	= 1;
-						term->numeric_value	= (double) atof(term->value);
+						term->numeric_value = (double) atof(term->value);
 					} else if (!strcmp(type, "float") || !strcmp(type, "double")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->float_re)) {
@@ -185,13 +185,13 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 								return NULL;
 							}
 						}
-// 						fprintf(stderr, "--------\n");
-// 						char* ss		= triplestore_term_to_string(t, term);
-// 						fprintf(stderr, "typed literal: %s\n", ss);
-// 						free(ss);
+//						fprintf(stderr, "--------\n");
+//						char* ss		= triplestore_term_to_string(t, term);
+//						fprintf(stderr, "typed literal: %s\n", ss);
+//						free(ss);
 
 						term->is_numeric	= 1;
-						term->numeric_value	= (double) atof(term->value);
+						term->numeric_value = (double) atof(term->value);
 					} else if (!strcmp(type, "dateTime")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->datetime_re)) {
@@ -212,12 +212,12 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 				}
 			}
 			
-// 			if (term->is_numeric) {
-// 				fprintf(stderr, ">>> Numeric literal: %lf\n", term->numeric_value);
-// 			}
-// 			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
-// 				sprintf(string, "%s", t->value);
-// 			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
+//			if (term->is_numeric) {
+//				fprintf(stderr, ">>> Numeric literal: %lf\n", term->numeric_value);
+//			}
+//			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
+//				sprintf(string, "%s", t->value);
+//			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
 
 
 
@@ -228,12 +228,12 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 }
 
 void free_rdf_term(rdf_term_t* t) {
-// 	if (t->type == TERM_LANG_LITERAL) {
-// 		free(t->vtype.value_type);
-// 	}
+//	if (t->type == TERM_LANG_LITERAL) {
+//		free(t->vtype.value_type);
+//	}
 
 	// t is the head of the single memory block for both the term struct and the string payload
-// 	free(t->value);
+//	free(t->value);
 	free(t);
 }
 
@@ -249,15 +249,15 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 			int64_t alang	= a->vtype.value_type;
 			int64_t blang	= b->vtype.value_type;
 			if (alang != blang) {
-				return (alang - blang);
+				return (int) (alang - blang);
 			}
 		} else if (a->type == TERM_TYPED_LITERAL) {
 			if (a->vtype.value_id != b->vtype.value_id) {
-				return (a->vtype.value_id - b->vtype.value_id);
+				return (int) (a->vtype.value_id - b->vtype.value_id);
 			}
 		} else if (a->type == TERM_BLANK) {
 			if (a->vtype.value_id != b->vtype.value_id) {
-				return (a->vtype.value_id - b->vtype.value_id);
+				return (int) (a->vtype.value_id - b->vtype.value_id);
 			}
 		}
 		
@@ -265,7 +265,7 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	} else {
 		if (a->type < b->type) {
 			return -1;
-		} else { //  if (a->type > b->type) {
+		} else { //	 if (a->type > b->type) {
 			return 1;
 		}
 	}
@@ -322,8 +322,8 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 #pragma mark -
 
 static int _hx_node_cmp_str ( const void* a, const void* b, void* param ) {
-	hx_nodemap_item* ia	= (hx_nodemap_item*) a;
-	hx_nodemap_item* ib	= (hx_nodemap_item*) b;
+	hx_nodemap_item* ia = (hx_nodemap_item*) a;
+	hx_nodemap_item* ib = (hx_nodemap_item*) b;
 	return term_compare(ia->_term, ib->_term);
 }
 
@@ -364,19 +364,21 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	t->nodes_alloc		= max_nodes;
 	t->edges_used		= 0;
 	t->nodes_used		= 0;
-	t->verify_datatypes	= 0;
+	t->verify_datatypes = 0;
 	t->bnode_prefix		= 0;
-// 	fprintf(stderr, "allocating %d bytes for %"PRIu32" edges\n", max_edges * sizeof(index_list_element_t), max_edges);
+//	fprintf(stderr, "allocating %d bytes for %"PRIu32" edges\n", max_edges * sizeof(index_list_element_t), max_edges);
 	t->edges		= calloc(sizeof(index_list_element_t), max_edges);
 	if (t->edges == NULL) {
 		fprintf(stderr, "*** Failed to allocate memory for triplestore edges\n");
+		free(t);
 		return NULL;
 	}
-// 	fprintf(stderr, "allocating %d bytes for graph for %"PRIu32" nodes\n", max_nodes * sizeof(graph_node_t), max_nodes);
+//	fprintf(stderr, "allocating %d bytes for graph for %"PRIu32" nodes\n", max_nodes * sizeof(graph_node_t), max_nodes);
 	t->graph		= calloc(sizeof(graph_node_t), max_nodes);
 	if (t->graph == NULL) {
-		free(t->edges);
 		fprintf(stderr, "*** Failed to allocate memory for triplestore graph\n");
+		free(t->edges);
+		free(t);
 		return NULL;
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
@@ -407,8 +409,8 @@ int free_triplestore(triplestore_t* t) {
 int triplestore_expand_edges(triplestore_t* t) {
 	int alloc	= t->edges_alloc;
 	alloc		*= 2;
-// 	fprintf(stderr, "Expanding triplestore to accept %d edges\n", alloc);
-	index_list_element_t* edges	= realloc(t->edges, alloc * sizeof(index_list_element_t));
+//	fprintf(stderr, "Expanding triplestore to accept %d edges\n", alloc);
+	index_list_element_t* edges = realloc(t->edges, alloc * sizeof(index_list_element_t));
 	if (edges) {
 		t->edges		= edges;
 		t->edges_alloc	= alloc;
@@ -421,8 +423,8 @@ int triplestore_expand_edges(triplestore_t* t) {
 int triplestore_expand_nodes(triplestore_t* t) {
 	int alloc	= t->nodes_alloc;
 	alloc		*= 2;
-// 	fprintf(stderr, "Expanding triplestore to accept %d nodes\n", alloc);
-	graph_node_t* graph	= realloc(t->graph, alloc * sizeof(graph_node_t));
+//	fprintf(stderr, "Expanding triplestore to accept %d nodes\n", alloc);
+	graph_node_t* graph = realloc(t->graph, alloc * sizeof(graph_node_t));
 	if (graph) {
 		t->graph		= graph;
 		t->nodes_alloc	= alloc;
@@ -480,7 +482,7 @@ static rdf_term_t* _readterm(triplestore_t* t, char* buffer, int* length) {
 		value_id	= extra_int;
 	}
 	
-	*length	= l;
+	*length = l;
 	return triplestore_new_term(t, type, value, value_type, value_id);
 }
 
@@ -511,7 +513,7 @@ int _triplestore_load_node(triplestore_t* t, char* buffer, int i, graph_node_t* 
 	node->mtime			= *((uint64_t*) &(buffer[0]));
 	node->out_degree	= ntohl(*((uint32_t*) &(buffer[8])));
 	node->in_degree		= ntohl(*((uint32_t*) &(buffer[12])));
-	node->out_edge_head	= ntohl(*((uint32_t*) &(buffer[16])));
+	node->out_edge_head = ntohl(*((uint32_t*) &(buffer[16])));
 	node->in_edge_head	= ntohl(*((uint32_t*) &(buffer[20])));
 	
 	int termsize		= 0;
@@ -564,8 +566,8 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 
 	struct stat fs;
 	fstat(fd, &fs);
-// 	fprintf(stderr, "Mapping file of %d bytes\n", (int) fs.st_size);
-	void* m	= mmap(NULL, fs.st_size, PROT_READ, MAP_SHARED, fd, 0);
+//	fprintf(stderr, "Mapping file of %d bytes\n", (int) fs.st_size);
+	void* m = mmap(NULL, fs.st_size, PROT_READ, MAP_SHARED, fd, 0);
 	if (m == MAP_FAILED) {
 		perror("Failed to mmap file");
 		close(fd);
@@ -578,12 +580,12 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 		return 1;
 	}
 	
-// 	uint32_t ealloc	= ntohl(*((uint32_t*) &(mp[4])));
+//	uint32_t ealloc = ntohl(*((uint32_t*) &(mp[4])));
 	uint32_t edges	= ntohl(*((uint32_t*) &(mp[8])));
-	uint32_t ealloc	= (edges < 4096) ? 4096 : edges;
-// 	uint32_t nalloc	= ntohl(*((uint32_t*) &(mp[12])));
+	uint32_t ealloc = (edges < 4096) ? 4096 : edges;
+//	uint32_t nalloc = ntohl(*((uint32_t*) &(mp[12])));
 	uint32_t nodes	= ntohl(*((uint32_t*) &(mp[16])));
-	uint32_t nalloc	= (nodes < 4096) ? 4096 : nodes;
+	uint32_t nalloc = (nodes < 4096) ? 4096 : nodes;
 
 	mp	+= 20;
 	
@@ -591,20 +593,20 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	t->nodes_used	= nodes;
 	t->edges_alloc	= ealloc;
 	t->edges_used	= edges;
-// 	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
+//	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
 	
 	t->graph				= calloc(sizeof(graph_node_t), 1+nalloc);
 	for (uint32_t i = 1; i <= nodes; i++) {
 		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
 		int length	= _triplestore_load_node(t, mp, i, &(t->graph[i]));
-		item->_term	= t->graph[i]._term;
+		item->_term = t->graph[i]._term;
 		item->id	= i;
 		avl_insert( t->dictionary, item );
 		mp	+= length;
 		
-// 		char* string	= triplestore_term_to_string(t, t->graph[i]._term);
-// 		fprintf(stderr, "Loaded term (%"PRIu32") %s\n", i, string);
-// 		free(string);
+//		char* string	= triplestore_term_to_string(t, t->graph[i]._term);
+//		fprintf(stderr, "Loaded term (%"PRIu32") %s\n", i, string);
+//		free(string);
 	}
 
 	t->edges		= calloc(sizeof(index_list_element_t), 1+ealloc);
@@ -618,17 +620,17 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	}
 
 
-// 	if (0) {
-// 		size_t used	= avl_count( t->dictionary );
-// 		struct avl_traverser iter;
-// 		avl_t_init( &iter, t->dictionary );
-// 		hx_nodemap_item* item	= NULL;
-// 		while ((item = (hx_nodemap_item*) avl_t_next( &iter )) != NULL) {
-// 			char* string		= triplestore_term_to_string(t, item->_term);
-// 			fprintf( stdout, "%-10"PRIu32"\t%s\n", item->id, string );
-// 			free( string );
-// 		}
-// 	}
+//	if (0) {
+//		size_t used = avl_count( t->dictionary );
+//		struct avl_traverser iter;
+//		avl_t_init( &iter, t->dictionary );
+//		hx_nodemap_item* item	= NULL;
+//		while ((item = (hx_nodemap_item*) avl_t_next( &iter )) != NULL) {
+//			char* string		= triplestore_term_to_string(t, item->_term);
+//			fprintf( stdout, "%-10"PRIu32"\t%s\n", item->id, string );
+//			free( string );
+//		}
+//	}
 
 	munmap(m, fs.st_size);
 	close(fd);
@@ -659,7 +661,7 @@ int triplestore_free_table(table_t* table) {
 }
 
 uint32_t* triplestore_table_row_ptr(table_t* table, int row) {
-	nodeid_t* p	= &( table->ptr[ row*(1+table->width) ] );
+	nodeid_t* p = &( table->ptr[ row*(1+table->width) ] );
 	return p;
 }
 
@@ -675,7 +677,7 @@ int triplestore_table_add_row(table_t* table, nodeid_t* result) {
 		}
 	}
 	int i	= table->used++;
-	nodeid_t* p	= &( table->ptr[ i*(1+table->width) ] );
+	nodeid_t* p = &( table->ptr[ i*(1+table->width) ] );
 	memcpy(p, result, (1+table->width) * sizeof(nodeid_t));
 	return 0;
 }
@@ -686,11 +688,11 @@ struct _sort_s {
 };
 
 // static void _print_row(const char* head, FILE* f, uint32_t* row, int width) {
-// 	fprintf(stderr, "%s:", head);
-// 	for (int i = 1; i <= width; i++) {
-// 		fprintf(stderr, " %"PRIu32"", row[i]);
-// 	}
-// 	fprintf(stderr, "\n");
+//	fprintf(stderr, "%s:", head);
+//	for (int i = 1; i <= width; i++) {
+//		fprintf(stderr, " %"PRIu32"", row[i]);
+//	}
+//	fprintf(stderr, "\n");
 // }
 
 #ifdef __APPLE__
@@ -783,11 +785,11 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		filter->node2		= va_arg(ap, int64_t);
 	} else if (type == FILTER_REGEX) {
 		int64_t id		= va_arg(ap, int64_t);
-		const char* pat	= va_arg(ap, char*);
+		const char* pat = va_arg(ap, char*);
 		const char* fl	= va_arg(ap, char*);
 		filter->node1	= id;
-		filter->string2	= calloc(1, 1+strlen(pat));
-		filter->string3	= calloc(1, 1+strlen(fl));
+		filter->string2 = calloc(1, 1+strlen(pat));
+		filter->string3 = calloc(1, 1+strlen(fl));
 		strcpy(filter->string2, pat);
 		strcpy(filter->string3, fl);
 
@@ -816,7 +818,7 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		}
 		
 		
-// 	FILTER_LANGMATCHES,	// LANGMATCHES(STR(?var), "string")
+//	FILTER_LANGMATCHES, // LANGMATCHES(STR(?var), "string")
 	} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS || type == FILTER_CONTAINS) {
 		filter->node1			= va_arg(ap, int64_t);
 		const char* pat			= va_arg(ap, char*);
@@ -910,12 +912,12 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 			break;
 		case FILTER_CONTAINS:
 			if (filter->node1 >= 0) {
-// 				fprintf(stderr, "CONTAINS argument does not map to a variable (%"PRId64"\n", filter->node1);
+//				fprintf(stderr, "CONTAINS argument does not map to a variable (%"PRId64"\n", filter->node1);
 				return 0;
 			}
 			tmpid	= current_match[-(filter->node1)];
 			if (!tmpid) {
-// 				fprintf(stderr, "CONTAINS variable does not map to a term\n");
+//				fprintf(stderr, "CONTAINS variable does not map to a term\n");
 				return 0;
 			}
 			term	= t->graph[ tmpid ]._term;
@@ -996,9 +998,9 @@ int triplestore_free_bgp(bgp_t* bgp) {
 
 int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t p, int64_t o) {
 	int i	= 3 * triple;
-	bgp->nodes[i+0]	= s;
-	bgp->nodes[i+1]	= p;
-	bgp->nodes[i+2]	= o;
+	bgp->nodes[i+0] = s;
+	bgp->nodes[i+1] = p;
+	bgp->nodes[i+2] = o;
 	return 0;
 }
 
@@ -1014,49 +1016,49 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 	int64_t sv	= -s;
 	int64_t pv	= -p;
 	int64_t ov	= -o;
-	int reset_s	= 0;
-	int reset_p	= 0;
-	int reset_o	= 0;
+	int reset_s = 0;
+	int reset_p = 0;
+	int reset_o = 0;
 	if (s < 0) {
 		if (current_match[sv] > 0) {
 			s	= current_match[sv];
-// 			fprintf(stderr, "- carrying over match of subject (variable %"PRId64"): %"PRId64"\n", sv, s);
+//			fprintf(stderr, "- carrying over match of subject (variable %"PRId64"): %"PRId64"\n", sv, s);
 			if (s == 0) {
 				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", sv);
 				assert(0);
 			}
 		} else {
-			reset_s	= 1;
+			reset_s = 1;
 		}
 	}
 	if (p < 0) {
 		if (current_match[pv] > 0) {
 			p	= current_match[pv];
-// 			fprintf(stderr, "- carrying over match of predicate (variable %"PRId64"): %"PRId64"\n", pv, p);
+//			fprintf(stderr, "- carrying over match of predicate (variable %"PRId64"): %"PRId64"\n", pv, p);
 			if (p == 0) {
 				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", pv);
 				assert(0);
 			}
 		} else {
-			reset_p	= 1;
+			reset_p = 1;
 		}
 	}
 	if (o < 0) {
 		if (current_match[ov] > 0) {
 			o	= current_match[ov];
-// 			fprintf(stderr, "- carrying over match of object (variable %"PRId64"): %"PRId64"\n", ov, o);
+//			fprintf(stderr, "- carrying over match of object (variable %"PRId64"): %"PRId64"\n", ov, o);
 			if (o == 0) {
 				fprintf(stderr, "*** Got unexpected zero node for variable %"PRId64"\n", ov);
 				assert(0);
 			}
 		} else {
-			reset_o	= 1;
+			reset_o = 1;
 		}
 	}
 	
-// 	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
+//	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
 	int r	= triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
-// 		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
+//		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
 		if (s < 0) {
 			current_match[-s]	= _s;
 		}
@@ -1078,7 +1080,7 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 
 // final_match is a node ID array with final_match[0] representing the number of following node IDs
 int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(nodeid_t* final_match)) {
-	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+variables);
+	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+variables);
 	current_match[0]	= variables;
 	int r	= _triplestore_bgp_match(t, bgp, 0, current_match, block);
 	free(current_match);
@@ -1102,7 +1104,7 @@ int triplestore_free_project(project_t* project) {
 }
 
 int triplestore_set_projection(project_t* project, int64_t var) {
-	project->keep[-var]	= 1;
+	project->keep[-var] = 1;
 	return 0;
 }
 
@@ -1151,7 +1153,7 @@ int _triplestore_sort_fill(triplestore_t* t, query_t* query, sort_t* sort, nodei
 path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end) {
 	path_t* path	= calloc(sizeof(path_t), 1);
 	path->type	= type;
-	path->start	= start;
+	path->start = start;
 	path->end	= end;
 	path->pred	= pred;
 	return path;
@@ -1163,21 +1165,21 @@ int triplestore_free_path(path_t* path) {
 }
 
 int _triplestore_path_step(triplestore_t* t, nodeid_t s, nodeid_t pred, char* seen, int depth, int(^block)(nodeid_t reached)) {
-// 	__indent(stderr, depth);
-// 	fprintf(stderr, "matching path %"PRId64" (%"PRIu32") %"PRId64"\n", s, path->pred, path->end);
+//	__indent(stderr, depth);
+//	fprintf(stderr, "matching path %"PRId64" (%"PRIu32") %"PRId64"\n", s, path->pred, path->end);
 	assert(s > 0);
 	
 	
 	
-// 	__indent(stderr, depth);
-// 	fprintf(stderr, "matching triple %"PRId64" %"PRIu32" 0\n", s, path->pred);
+//	__indent(stderr, depth);
+//	fprintf(stderr, "matching triple %"PRId64" %"PRIu32" 0\n", s, path->pred);
 	int r	= triplestore_match_triple(t, s, pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 		if (seen[_o]) {
 			return 0;
 		} else {
 			seen[_o]	= 1;
-	// 		__indent(stderr, depth);
-	// 		fprintf(stderr, "got triple --> %"PRIu32" %"PRIu32" %"PRIu32"\n", _s, _p, _o);
+	//		__indent(stderr, depth);
+	//		fprintf(stderr, "got triple --> %"PRIu32" %"PRIu32" %"PRIu32"\n", _s, _p, _o);
 
 			if (block(_o)) {
 				return 1;
@@ -1201,28 +1203,28 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 		int r;
 		
 		int64_t start	= path->start;
-// 		fprintf(stderr, "matching path with start %"PRId64"\n", start);
+//		fprintf(stderr, "matching path with start %"PRId64"\n", start);
 		if (start < 0) {
 			int64_t s	= current_match[-start];
 			if (s > 0) {
 				start	= s;
-// 				fprintf(stderr, "replacing path start with bound term %"PRId64"\n", start);
+//				fprintf(stderr, "replacing path start with bound term %"PRId64"\n", start);
 			}
 		}
 		
 		if (start <= 0) {
-// 			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
+//			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
 			char* starts	= calloc(1, t->nodes_used);
 			r	= triplestore_match_triple(t, start, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 				if (starts[_s]++) {
 					return 0;
 				}
 				memset(seen, 0, t->nodes_used);
-// 				fprintf(stderr, "path match setting match[%"PRId64"]\n", -start);
+//				fprintf(stderr, "path match setting match[%"PRId64"]\n", -start);
 				current_match[-start]	= _s;
 				return _triplestore_path_step(t, _s, path->pred, seen, 0, ^(nodeid_t reached) {
 					if (path->end < 0) {
-						current_match[-(path->end)]	= reached;
+						current_match[-(path->end)] = reached;
 					} else if (path->end > 0) {
 						if (reached != path->end) {
 							return 0;
@@ -1235,7 +1237,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 		} else {
 			r	= _triplestore_path_step(t, start, path->pred, seen, 0, ^(nodeid_t reached) {
 				if (path->end < 0) {
-					current_match[-(path->end)]	= reached;
+					current_match[-(path->end)] = reached;
 				}
 				return block(current_match);
 			});
@@ -1246,7 +1248,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 }
 
 int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(nodeid_t* final_match)) {
-	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+variables);
+	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+variables);
 	current_match[0]	= variables;
 	int r				= _triplestore_path_match(t, path, current_match, block);
 	free(current_match);
@@ -1293,10 +1295,12 @@ int triplestore_free_query_op(query_op_t* op) {
 }
 
 int triplestore_free_query(query_t* query) {
-	for (int i = 0; i < query->variables; i++) {
+	for (int i = 0; i <= query->variables; i++) {
 		free(query->variable_names[i]);
+		query->variable_names[i]	= NULL;
 	}
 	free(query->variable_names);
+	query->variable_names	= NULL;
 	
 	if (query->head) {
 		triplestore_free_query_op(query->head);
@@ -1307,25 +1311,50 @@ int triplestore_free_query(query_t* query) {
 }
 
 int triplestore_query_set_variable_name(query_t* query, int variable, const char* name) {
-	triplestore_ensure_variable_capacity(query, variable);
-	query->variable_names[variable]	= calloc(1, 1+strlen(name));
+	if (triplestore_ensure_variable_capacity(query, variable) < 0) {
+		return 1;
+	}
+	
+	if (query->variable_names[variable]) {
+		fprintf(stderr, "freeing %d: %p\n", variable, query->variable_names[variable]);
+		free(query->variable_names[variable]);
+		query->variable_names[variable] = NULL;
+	}
+	query->variable_names[variable] = calloc(1, 1+strlen(name));
+	if (!query->variable_names[variable]) {
+		return 1;
+	}
+	
 	strcpy(query->variable_names[variable], name);
 	return 0;
 }
 
 int triplestore_ensure_variable_capacity(query_t* query, int var) {
 	if (var > query->variables) {
+		int previous_count	= query->variables;
 		query->variables	= var;
-		query->variable_names	= realloc(query->variable_names, sizeof(char*) * (1+query->variables));
+		char** new_names	= calloc(sizeof(char*), 1+query->variables);
+		if (!new_names) {
+			return -1;
+		}
+		for (int i = 0; i <= previous_count; i++) {
+			new_names[i]	= query->variable_names[i];
+		}
+		free(query->variable_names);
+		query->variable_names	= new_names;
 		return 1;
 	}
 	return 0;
 }
 
 int64_t triplestore_query_add_variable(query_t* query, const char* name) {
-	int64_t var	= 1 + query->variables;
-	triplestore_ensure_variable_capacity(query, var);
-	triplestore_query_set_variable_name(query, var, name);
+	int64_t var = 1 + query->variables;
+	if (triplestore_ensure_variable_capacity(query, var) < 0) {
+		return 0;
+	}
+	if (triplestore_query_set_variable_name(query, var, name)) {
+		return 0;
+	}
 	return -var;
 }
 
@@ -1338,8 +1367,8 @@ int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
 		query->tail->next	= op;
 		query->tail			= op;
 	} else {
-		query->head	= op;
-		query->tail	= op;
+		query->head = op;
+		query->tail = op;
 	}
 	return 0;
 }
@@ -1375,8 +1404,8 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 }
 
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
-// 	triplestore_print_query(t, query, stderr);
-	nodeid_t* current_match	= calloc(sizeof(nodeid_t), 1+query->variables);
+//	triplestore_print_query(t, query, stderr);
+	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+query->variables);
 	current_match[0]	= query->variables;
 	query_op_t* op		= query->head;
 	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
@@ -1393,7 +1422,10 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 			table_t* table	= sort->table;
 			triplestore_table_sort(t, table, sort);
 			int size			= sizeof(nodeid_t) * (1+query->variables);
-			nodeid_t* last	= calloc(1, size);
+			nodeid_t* last		= calloc(1, size);
+			if (!last) {
+				return 1;
+			}
 			for (uint32_t row = 0; row < table->used; row++) {
 				uint32_t* result	= triplestore_table_row_ptr(table, row);
 				if (sort->unique) {
@@ -1508,16 +1540,16 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 		}
 
 		item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
-		item->_term	= myterm;
+		item->_term = myterm;
 		item->id	= ++t->nodes_used;
 		avl_insert( t->dictionary, item );
 		
 		graph_node_t node	= { ._term = item->_term, .mtime = 0, .out_edge_head = 0, .in_edge_head = 0 };
 		t->graph[item->id]	= node;
-// 		fprintf(stdout, "+ %6"PRIu32" %s\n", item->id, triplestore_term_to_string(t, term));
+//		fprintf(stdout, "+ %6"PRIu32" %s\n", item->id, triplestore_term_to_string(t, term));
 	} else {
 		free_rdf_term(myterm);
-// 		fprintf(stdout, "  %6"PRIu32" %s\n", item->id, triplestore_term_to_string(t, term));
+//		fprintf(stdout, "  %6"PRIu32" %s\n", item->id, triplestore_term_to_string(t, term));
 	}
 	return item->id;
 }
@@ -1534,7 +1566,7 @@ static void parser_handle_triple (void* user_data, raptor_statement* triple) {
 	nodeid_t p	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->predicate, pctx->bnode_prefix));
 	nodeid_t o	= triplestore_add_term(pctx->store, term_from_raptor_term(pctx->store, triple->object, pctx->bnode_prefix));
 	if (s == 0 || p == 0 || o == 0) {
-// 		pctx->error++;
+//		pctx->error++;
 		return;
 	}
 	if (triplestore_add_triple(pctx->store, s, p, o, pctx->timestamp)) {
@@ -1553,7 +1585,7 @@ static void parser_handle_triple (void* user_data, raptor_statement* triple) {
 }
 
 static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pctx ) {
-	raptor_world* world	= raptor_new_world();
+	raptor_world* world = raptor_new_world();
 	raptor_world_open(world);
 
 	unsigned char* uri_string	= raptor_uri_filename_to_uri_string( filename );
@@ -1566,9 +1598,9 @@ static void parse_rdf_from_file ( const char* filename, struct parser_ctx_s* pct
 	int verify	= pctx->store->verify_datatypes;
 	pctx->store->verify_datatypes	= 1;
 	int fd	= open(filename, O_RDONLY);
-// 	fcntl(fd, F_NOCACHE, 1);
-// 	fcntl(fd, F_RDAHEAD, 1);
-	FILE* f	= fdopen(fd, "r");
+//	fcntl(fd, F_NOCACHE, 1);
+//	fcntl(fd, F_RDAHEAD, 1);
+	FILE* f = fdopen(fd, "r");
 	raptor_parser_parse_file_stream(rdf_parser, f, filename, base_uri);
 	fclose(f);
 	
@@ -1752,7 +1784,7 @@ void triplestore_print_project(triplestore_t* t, query_t* query, project_t* proj
 void triplestore_print_sort(triplestore_t* t, query_t* query, sort_t* sort, FILE* f) {
 	fprintf(f, "Sort:\n");
 	for (int i = 0; i < sort->size; i++) {
-		int64_t var	= sort->vars[i];
+		int64_t var = sort->vars[i];
 		fprintf(f, "  - ?%s\n", query->variable_names[-var]);
 	}
 }

@@ -45,9 +45,12 @@ static int64_t _triplestore_query_get_variable_id(query_t* query, const char* va
 		p++;
 	}
 	for (int x = 1; x <= query->variables; x++) {
-		if (!strcmp(p, query->variable_names[x])) {
-			v	= -x;
-			break;
+		const char* vname	= query->variable_names[x];
+		if (vname) {
+			if (!strcmp(p, vname)) {
+				v	= -x;
+				break;
+			}
 		}
 	}
 	return v;
@@ -62,7 +65,7 @@ static int64_t query_node_id(triplestore_t* t, query_t* query, const char* ts) {
 		if (!p) {
 			return 0;
 		}
-		int len	= p - ts;
+		long len	= p - ts;
 		char* value	= malloc(1 + len);
 		snprintf(value, len, "%s", ts+1);
 // 		fprintf(stderr, "IRI: (%d) <%s>\n", len, value);
@@ -75,7 +78,7 @@ static int64_t query_node_id(triplestore_t* t, query_t* query, const char* ts) {
 			fprintf(stderr, "cannot parse literal value\n");
 			return 0;
 		}
-		int len	= p - ts;
+		long len	= p - ts;
 		char* value	= malloc(1 + len);
 		snprintf(value, len, "%s", ts+1);
 		rdf_term_t* term	= NULL;
@@ -84,14 +87,15 @@ static int64_t query_node_id(triplestore_t* t, query_t* query, const char* ts) {
 			char* q	= strstr(p, ">");
 			if (!q) {
 				fprintf(stderr, "cannot parse datatype IRI\n");
+                free(value);
 				return 0;
 			}
-			int len	= q - p + 1;
+			long len	= q - p + 1;
 			char* dt	= malloc(1 + len);
 			snprintf(dt, len, "%s", p);
 			rdf_term_t* dtterm = triplestore_new_term(t, TERM_IRI, dt, NULL, 0);
 			int64_t dtid = triplestore_get_term(t, dtterm);
-			term = triplestore_new_term(t, TERM_TYPED_LITERAL, value, NULL, dtid);
+			term = triplestore_new_term(t, TERM_TYPED_LITERAL, value, NULL, (nodeid_t) dtid);
 			free(dt);
 		} else if (p[1] == '@') {
 			p += 2;
@@ -144,7 +148,6 @@ static query_t* construct_bgp_query(triplestore_t* t, struct server_runtime_ctx_
 	while (i+1 < argc) {
 		int index			= j++;
 		const char* ts		= argv[++i];
-		fprintf(stderr, "*** %s\n", ts);
 		int64_t id			= query_node_id(t, query, ts);
 		if (!id) {
 			fprintf(stderr, "No node ID found for BGP term %s\n", ts);
@@ -316,6 +319,7 @@ triplestore_server_t* triplestore_new_server(short port, int use_http) {
 }
 
 int triplestore_free_server(triplestore_server_t* s) {
+	dispatch_barrier_sync(s->queue, ^{});
 	dispatch_release(s->queue);
 	close(s->fd);
 	free(s);
@@ -425,6 +429,7 @@ int triplestore_run_server(triplestore_server_t* s, triplestore_t* t) {
 	uint64_t count	= 0;
 	while (1) {
 		count++;
+		// if (count > 1000) { break; } // XXXXXXXXXXXXXX
 		addrlen	= sizeof(peer);
 		sd	= accept(s->fd, (struct sockaddr*) &peer, &addrlen);
 		if (sd < 0) {
@@ -488,7 +493,7 @@ static int triplestore_op(triplestore_t* t, struct server_runtime_ctx_s* ctx, in
 		if (!query) {
 			return server_ctx_set_error(ctx, "No query object present in END");
 		}
-		triplestore_print_query(t, query, stderr);
+		// triplestore_print_query(t, query, stderr);
 		ctx->query	= NULL;
 		ctx->constructing	= 0;
 		if (query) {
@@ -847,8 +852,6 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, F
 				while (j < len && buffer[j] == ' ') {
 					buffer[j++] = '\0';
 				}
-				fprintf(stderr, "0x%02x\n", buffer[j]);
-				fprintf(stderr, "arg %d: '%s'\n", argc, &(buffer[j]));
 				argv[argc++]	= &(buffer[j]);
 			}
 		}
