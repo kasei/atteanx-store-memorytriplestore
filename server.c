@@ -74,6 +74,7 @@ int main (int argc, char** argv) {
 	
 	int use_http	= 1;
 	triplestore_server_t* server	= triplestore_new_server(port, use_http);
+	signal(SIGPIPE, SIG_IGN);
 	triplestore_run_server(server, t);
 	free_triplestore(t);
 	return 0;
