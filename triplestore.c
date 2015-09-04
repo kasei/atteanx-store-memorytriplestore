@@ -669,7 +669,7 @@ int triplestore_table_add_row(table_t* table, nodeid_t* result) {
 	if (table->used == table->alloc) {
 		table->alloc	*= 2;
 		size_t requested	= table->alloc * (1+table->width) * sizeof(nodeid_t);
-		fprintf(stderr, "Reallocating to %zu bytes (currently have %d rows)\n", requested, table->used);
+// 		fprintf(stderr, "Reallocating to %zu bytes (currently have %d rows)\n", requested, table->used);
 		table->ptr	= realloc(table->ptr, requested);
 		if (table->ptr == NULL) {
 			fprintf(stderr, "failed to grow table size\n");
@@ -1733,6 +1733,62 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 #pragma mark -
 #pragma mark Print Functions
 
+int triplestore_write_term(triplestore_t* t, nodeid_t s, int fd) {
+	if (s > t->nodes_used) {
+		return 1;
+	}
+	rdf_term_t* dt			= NULL;
+	rdf_term_t* term		= t->graph[s]._term;
+	if (term == NULL) {
+		return 1;
+	}
+	
+	char* buffer	= alloca(64);
+	switch (term->type) {
+		case TERM_IRI:
+			write(fd, "<", 1);
+			write(fd, term->value, strlen(term->value));
+			write(fd, ">", 1);
+			break;
+		case TERM_BLANK:
+			write(fd, "_:", 2);
+			write(fd, term->value, strlen(term->value));
+			snprintf(buffer, 32, "%"PRIu32"b%s", (uint32_t) term->vtype.value_id, term->value);
+			write(fd, buffer, strlen(buffer));
+			break;
+		case TERM_XSDSTRING_LITERAL:
+			// TODO: handle escaping
+			write(fd, "\"", 1);
+			write(fd, term->value, strlen(term->value));
+			write(fd, "\"", 1);
+			break;
+		case TERM_LANG_LITERAL:
+			// TODO: handle escaping
+			write(fd, "\"", 1);
+			write(fd, term->value, strlen(term->value));
+			write(fd, "\"@", 2);
+			write(fd, (char*) &(term->vtype.value_type), strlen((char*) &(term->vtype.value_type)));
+			break;
+		case TERM_TYPED_LITERAL:
+			// TODO: handle escaping
+			dt		= t->graph[ term->vtype.value_id ]._term;
+			if (strcmp(dt->value, "http://www.w3.org/2001/XMLSchema#string")) {
+				write(fd, "\"", 1);
+				write(fd, term->value, strlen(term->value));
+				write(fd, "\"^^<", 4);
+				write(fd, dt->value, strlen(dt->value));
+				write(fd, ">", 1);
+			} else {
+				write(fd, "\"", 1);
+				write(fd, term->value, strlen(term->value));
+				write(fd, "\"", 1);
+			}
+			break;
+	}
+
+	return 0;
+}
+
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
 	if (s > t->nodes_used) {
 		fprintf(f, "(undefined)");
@@ -1750,6 +1806,17 @@ int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
 	}
 	free(ss);
 	return 0;
+}
+
+static void _write_term_or_variable(triplestore_t* t, int variables, char** variable_names, int64_t s, int fd) {
+	if (s == 0) {
+		write(fd, "[]", 2);
+	} else if (s < 0) {
+		write(fd, "?", 1);
+		write(fd, variable_names[-s], strlen(variable_names[-s]));
+	} else {
+		triplestore_write_term(t, s, fd);
+	}
 }
 
 static void _print_term_or_variable(triplestore_t* t, int variables, char** variable_names, int64_t s, FILE* f) {
