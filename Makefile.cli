@@ -2,17 +2,17 @@ LDLIBS	= -lraptor2 -lpcre
 CFLAGS	= -fblocks -g -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-	LDLIBS += -lBlocksRuntime
+	LDLIBS += -lBlocksRuntime -ldispatch
 endif
 ifeq ($(UNAME_S),Darwin)
 	CFLAGS += -std=c11
 endif
 
-CC		?= clang
+CC		= clang
 
 %.o: %.h %.c
 
-all: ts runner server
+all: ts runner server fuzz
 
 ts: ts.c triplestore.o avl.o linenoise.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o
@@ -22,6 +22,9 @@ runner: runner.c triplestore.o avl.o linenoise.o
 
 server: server.c triplestore.o avl.o linenoise.o triplestore-server.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o server server.c triplestore.o avl.o linenoise.o triplestore-server.o
+
+fuzz: fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o
+	$(CC) $(LDLIBS) $(CFLAGS) -o fuzz fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o
 
 clean:
 	rm -f ts
