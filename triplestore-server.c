@@ -3,7 +3,7 @@
 
 #pragma mark -
 
-int server_ctx_set_error(struct server_runtime_ctx_s* ctx, char* message) {
+static int server_ctx_set_error(struct server_runtime_ctx_s* ctx, char* message) {
 	ctx->error++;
 	if (!ctx->error_message) {
 		ctx->error_message	= message;
@@ -160,13 +160,16 @@ static query_t* construct_bgp_query(triplestore_t* t, struct server_runtime_ctx_
 		int64_t id			= query_node_id(t, query, ts);
 		if (!id) {
 			fprintf(stderr, "No node ID found for BGP term %s\n", ts);
+			triplestore_free_query(query);
+			triplestore_free_bgp(bgp);
 			free(ids);
 			return NULL;
 		}
 		ids[index]	= id;
 	}
 	
-	int* seen				= calloc(3*triples, sizeof(int));
+	int possible_variables	= query->variables + 3*triples;
+	int* seen				= calloc(possible_variables, sizeof(int));
 	for (j = 0; j < triples; j++) {
 		int64_t s	= ids[3*j + 0];
 		int64_t p	= ids[3*j + 1];
@@ -179,6 +182,8 @@ static query_t* construct_bgp_query(triplestore_t* t, struct server_runtime_ctx_
 			if (joinable == 0) {
 				free(ids);
 				free(seen);
+				triplestore_free_query(query);
+				triplestore_free_bgp(bgp);
 				server_ctx_set_error(ctx, "BGP with cartesian products are not allowed");
 				return NULL;
 			}
@@ -196,143 +201,143 @@ static query_t* construct_bgp_query(triplestore_t* t, struct server_runtime_ctx_
 	return query;
 }
 
-int triplestore_match_terms(triplestore_t* t, const char* pattern, int(^block)(nodeid_t id)) {
-	const char *error;
-	int erroffset;
-	pcre* re = pcre_compile(
-		pattern,		/* the pattern */
-		0,				/* default options */
-		&error,			/* for error message */
-		&erroffset,		/* for error offset */
-		NULL			/* use default character tables */
-	);
-	if (re == NULL) {
-		printf("PCRE compilation failed at offset %d: %s\n", erroffset, error);
-		exit(1);
-	}
-
-	int64_t count	= 0;
-	for (nodeid_t s = 1; s < t->nodes_used; s++) {
-		char* string		= triplestore_term_to_string(t, t->graph[s]._term);
-// 			fprintf(stderr, "matching %s =~ %s\n", string, pattern);
-		int OVECCOUNT	= 30;
-		int ovector[OVECCOUNT];
-		int rc = pcre_exec(
-			re,							/* the compiled pattern */
-			NULL,						/* no extra data - we didn't study the pattern */
-			string,						/* the subject string */
-			strlen(string),				/* the length of the subject */
-			0,							/* start at offset 0 in the subject */
-			0,							/* default options */
-			ovector,					/* output vector for substring information */
-			OVECCOUNT					/* number of elements in the output vector */
-		);
-		if (rc < 0) {
-			switch(rc) {
-				case PCRE_ERROR_NOMATCH: break;
-				default: printf("Matching error %d\n", rc); break;
-			}
-			free(string);
-			continue;
-		}
-		if (rc == 0) {
-			rc = OVECCOUNT/3;
-			printf("ovector only has room for %d captured substrings\n", rc - 1);
-			free(string);
-			continue;
-		}
-		
-		count++;
-		int r	= block(s);
-		free(string);
-		
-		if (r) {
-			break;
-		}
-	}
-	pcre_free(re);     /* Release memory used for the compiled pattern */
-	return 0;
-}
-
-#pragma mark -
-
-int triplestore_print_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, FILE* f) {
-	rdf_term_t* subject		= t->graph[s]._term;
-	rdf_term_t* predicate	= t->graph[p]._term;
-	rdf_term_t* object		= t->graph[o]._term;
-
-	if (subject == NULL) assert(0);
-	if (predicate == NULL) assert(0);
-	if (object == NULL) assert(0);
-
-	char* ss		= triplestore_term_to_string(t, subject);
-	char* sp		= triplestore_term_to_string(t, predicate);
-	char* so		= triplestore_term_to_string(t, object);
-	fprintf(f, "%s %s %s .\n", ss, sp, so);
-	free(ss);
-	free(sp);
-	free(so);
-	return 0;
-}
-
-int triplestore_print_ntriples(triplestore_t* t, FILE* f) {
-	uint32_t count	= 0;
-	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
-		nodeid_t idx	= t->graph[s].out_edge_head;
-		while (idx != 0) {
-			nodeid_t p	= t->edges[idx].p;
-			nodeid_t o	= t->edges[idx].o;
-			triplestore_print_triple(t, s, p, o, f);
-			idx			= t->edges[idx].next_out;
-			count++;
-		}
-	}
-	return 0;
-}
-
-int triplestore_node_dump(triplestore_t* t, FILE* f) {
-	fprintf(f, "# %"PRIu32" nodes\n", t->nodes_used);
-	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
-		char* ss		= triplestore_term_to_string(t, t->graph[s]._term);
-		fprintf(f, "N %07"PRIu32" %s (%"PRIu32", %"PRIu32")\n", s, ss, t->graph[s].in_degree, t->graph[s].out_degree);
-		free(ss);
-	}
-	return 0;
-}
-
-int triplestore_edge_dump(triplestore_t* t, FILE* f) {
-	fprintf(f, "# %"PRIu32" edges\n", t->edges_used);
-	int64_t count	= 0;
-	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
-		nodeid_t idx	= t->graph[s].out_edge_head;
-		while (idx != 0) {
-			nodeid_t p	= t->edges[idx].p;
-			nodeid_t o	= t->edges[idx].o;
-			fprintf(f, "E %07"PRIu32" %07"PRIu32" %07"PRIu32"\n", s, p, o);
-			idx			= t->edges[idx].next_out;
-			count++;
-		}
-	}
-	return 0;
-}
-
-int triplestore_print_data(triplestore_t* t, FILE* f) {
-	triplestore_node_dump(t, f);
-	triplestore_edge_dump(t, f);
-	return 0;
-}
-
-nodeid_t triplestore_print_match(triplestore_t* t, int64_t s, int64_t p, int64_t o, FILE* f) {
-	__block nodeid_t count	= 0;
-	triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o) {
-		count++;
-		if (f != NULL) {
-			triplestore_print_triple(t, s, p, o, f);
-		}
-		return 0;
-	});
-	return count;
-}
+// static int triplestore_match_terms(triplestore_t* t, const char* pattern, int(^block)(nodeid_t id)) {
+// 	const char *error;
+// 	int erroffset;
+// 	pcre* re = pcre_compile(
+// 		pattern,		/* the pattern */
+// 		0,				/* default options */
+// 		&error,			/* for error message */
+// 		&erroffset,		/* for error offset */
+// 		NULL			/* use default character tables */
+// 	);
+// 	if (re == NULL) {
+// 		printf("PCRE compilation failed at offset %d: %s\n", erroffset, error);
+// 		exit(1);
+// 	}
+// 
+// 	int64_t count	= 0;
+// 	for (nodeid_t s = 1; s < t->nodes_used; s++) {
+// 		char* string		= triplestore_term_to_string(t, t->graph[s]._term);
+// // 			fprintf(stderr, "matching %s =~ %s\n", string, pattern);
+// 		int OVECCOUNT	= 30;
+// 		int ovector[OVECCOUNT];
+// 		int rc = pcre_exec(
+// 			re,							/* the compiled pattern */
+// 			NULL,						/* no extra data - we didn't study the pattern */
+// 			string,						/* the subject string */
+// 			strlen(string),				/* the length of the subject */
+// 			0,							/* start at offset 0 in the subject */
+// 			0,							/* default options */
+// 			ovector,					/* output vector for substring information */
+// 			OVECCOUNT					/* number of elements in the output vector */
+// 		);
+// 		if (rc < 0) {
+// 			switch(rc) {
+// 				case PCRE_ERROR_NOMATCH: break;
+// 				default: printf("Matching error %d\n", rc); break;
+// 			}
+// 			free(string);
+// 			continue;
+// 		}
+// 		if (rc == 0) {
+// 			rc = OVECCOUNT/3;
+// 			printf("ovector only has room for %d captured substrings\n", rc - 1);
+// 			free(string);
+// 			continue;
+// 		}
+// 		
+// 		count++;
+// 		int r	= block(s);
+// 		free(string);
+// 		
+// 		if (r) {
+// 			break;
+// 		}
+// 	}
+// 	pcre_free(re);     /* Release memory used for the compiled pattern */
+// 	return 0;
+// }
+// 
+// #pragma mark -
+// 
+// static int triplestore_print_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, FILE* f) {
+// 	rdf_term_t* subject		= t->graph[s]._term;
+// 	rdf_term_t* predicate	= t->graph[p]._term;
+// 	rdf_term_t* object		= t->graph[o]._term;
+// 
+// 	if (subject == NULL) assert(0);
+// 	if (predicate == NULL) assert(0);
+// 	if (object == NULL) assert(0);
+// 
+// 	char* ss		= triplestore_term_to_string(t, subject);
+// 	char* sp		= triplestore_term_to_string(t, predicate);
+// 	char* so		= triplestore_term_to_string(t, object);
+// 	fprintf(f, "%s %s %s .\n", ss, sp, so);
+// 	free(ss);
+// 	free(sp);
+// 	free(so);
+// 	return 0;
+// }
+// 
+// static int triplestore_print_ntriples(triplestore_t* t, FILE* f) {
+// 	uint32_t count	= 0;
+// 	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
+// 		nodeid_t idx	= t->graph[s].out_edge_head;
+// 		while (idx != 0) {
+// 			nodeid_t p	= t->edges[idx].p;
+// 			nodeid_t o	= t->edges[idx].o;
+// 			triplestore_print_triple(t, s, p, o, f);
+// 			idx			= t->edges[idx].next_out;
+// 			count++;
+// 		}
+// 	}
+// 	return 0;
+// }
+// 
+// static int triplestore_node_dump(triplestore_t* t, FILE* f) {
+// 	fprintf(f, "# %"PRIu32" nodes\n", t->nodes_used);
+// 	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
+// 		char* ss		= triplestore_term_to_string(t, t->graph[s]._term);
+// 		fprintf(f, "N %07"PRIu32" %s (%"PRIu32", %"PRIu32")\n", s, ss, t->graph[s].in_degree, t->graph[s].out_degree);
+// 		free(ss);
+// 	}
+// 	return 0;
+// }
+// 
+// static int triplestore_edge_dump(triplestore_t* t, FILE* f) {
+// 	fprintf(f, "# %"PRIu32" edges\n", t->edges_used);
+// 	int64_t count	= 0;
+// 	for (nodeid_t s = 1; s <= t->nodes_used; s++) {
+// 		nodeid_t idx	= t->graph[s].out_edge_head;
+// 		while (idx != 0) {
+// 			nodeid_t p	= t->edges[idx].p;
+// 			nodeid_t o	= t->edges[idx].o;
+// 			fprintf(f, "E %07"PRIu32" %07"PRIu32" %07"PRIu32"\n", s, p, o);
+// 			idx			= t->edges[idx].next_out;
+// 			count++;
+// 		}
+// 	}
+// 	return 0;
+// }
+// 
+// static int triplestore_print_data(triplestore_t* t, FILE* f) {
+// 	triplestore_node_dump(t, f);
+// 	triplestore_edge_dump(t, f);
+// 	return 0;
+// }
+// 
+// static nodeid_t triplestore_print_match(triplestore_t* t, int64_t s, int64_t p, int64_t o, FILE* f) {
+// 	__block nodeid_t count	= 0;
+// 	triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o) {
+// 		count++;
+// 		if (f != NULL) {
+// 			triplestore_print_triple(t, s, p, o, f);
+// 		}
+// 		return 0;
+// 	});
+// 	return count;
+// }
 
 #pragma mark -
 
@@ -341,18 +346,24 @@ triplestore_server_t* triplestore_new_server(short port, int use_http) {
 	server->use_http	= use_http;
 	server->port		= port;
 	server->queue		= dispatch_queue_create("us.kasei.triplestore.workers", DISPATCH_QUEUE_CONCURRENT);
+	server->sync_queue	= dispatch_queue_create("us.kasei.triplestore.sync", NULL);
+	server->buffer_size	= 4096;
 	return server;
 }
 
 int triplestore_free_server(triplestore_server_t* s) {
 	dispatch_barrier_sync(s->queue, ^{});
+	dispatch_barrier_sync(s->sync_queue, ^{});	
+
 	dispatch_release(s->queue);
+	dispatch_release(s->sync_queue);
 	close(s->fd);
 	free(s);
 	return 0;
 }
 
 static int write_http_header(FILE* out, int code, const char* message) {
+// 	fprintf(stderr, "writing HTTP header %03d\n", code);
 	time_t now		= time(0);
 	struct tm tm	= *gmtime(&now);
 	char* buf		= alloca(256);
@@ -378,24 +389,33 @@ static int write_http_error_header(struct server_runtime_ctx_s* ctx, FILE* out, 
 	return 0;
 }
 
-static int read_http_header(FILE* in) {
-	int state	= 0;
-	int cur;
+static int read_http_header(triplestore_server_t* server, FILE* in, int* length) {
 // 	fprintf(stderr, "Reading HTTP header:\n");
 // 	fprintf(stderr, "-------------------------\n");
-	while ((cur = fgetc(in)) != EOF) {
-// 		fprintf(stderr, "%c", cur);
-		char expect	= (state % 2) ? '\n' : '\r';
-		if (cur == expect) {
-			state++;
-			if (state == 4) {
-				return 0;
+	int cl					= 0;
+	size_t len	= 1024;
+	char* line	= calloc(1, 1024);
+	ssize_t bytes;
+	while ((bytes = getline(&line, &len, in)) != -1) {
+		if (bytes == 2 && !strcmp(line, "\r\n")) {
+			free(line);
+			return 0;
+		}
+// 		fprintf(stderr, "[%zu] %s\n", bytes, line);
+		char* ptr	= strcasestr(line, "Content-Length:");
+		if (ptr) {
+			ptr	+= 15;
+			while (*ptr == ' ') {
+				ptr++;
 			}
-		} else {
-			state	= 0;
+			cl	= atoi(ptr);
+			if (length) {
+// 				fprintf(stderr, "Content-Length: %d\n", cl);
+				*length	= cl;
+			}
 		}
 	}
-// 	fprintf(stderr, "\n--- EOF FOUND -------------------------\n");
+	free(line);
 	return 1;
 }
 
@@ -453,30 +473,41 @@ int triplestore_run_server(triplestore_server_t* s, triplestore_t* t) {
 	int sd;
 	socklen_t addrlen;
 	uint64_t count	= 0;
+	
+	fd_set set;
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 500000;
+	
 	while (1) {
-		count++;
-		// if (count > 1000) { break; } // XXXXXXXXXXXXXX
-		addrlen	= sizeof(peer);
-		sd	= accept(s->fd, (struct sockaddr*) &peer, &addrlen);
-		if (sd < 0) {
-			perror("Wrong connection");
-			exit(1);
+		FD_ZERO(&set);
+		FD_SET(s->fd, &set);
+		int ready	= select(s->fd+1, &set, NULL, NULL, &timeout);
+		if (ready > 0) {
+// 			fprintf(stderr, "Peer available. trying to accept\n");
+			count++;
+			addrlen	= sizeof(peer);
+			sd	= accept(s->fd, (struct sockaddr*) &peer, &addrlen);
+			if (sd < 0) {
+				perror("Wrong connection");
+				exit(1);
+			}
+
+// 			fprintf(stderr, "Accepted connection on fd %d\n", sd);
+			dispatch_async(s->queue, ^{
+				FILE* f	= fdopen(sd, "r+");
+				if (f == NULL) {
+					perror("");
+					return;
+				}
+
+				triplestore_read_and_run_query(s, t, f, f);
+				fclose(f);
+			});
+		} else {
+			fprintf(stderr, ".");
+			usleep(500000);
 		}
-
-// 		fprintf(stderr, "Accept connection\n");
-		dispatch_async(s->queue, ^{
-			FILE* f	= fdopen(sd, "r+");
-			if (f == NULL) {
-				perror("");
-				return;
-			}
-
-			if (s->use_http) {
-				read_http_header(f);
-			}
-			triplestore_run_query(s, t, f, f);
-			fclose(f);
-		});
 	}
 	return 0;
 }
@@ -490,9 +521,6 @@ static int triplestore_op(triplestore_t* t, struct server_runtime_ctx_s* ctx, in
 	FILE* f	= stdout;
 	const char* op			= argv[i];
 	if (!strcmp(op, "") || op[0] == '#') {
-// 	} else if (!strcmp(op, "size")) {
-// 		uint32_t count	= triplestore_size(t);
-// 		fprintf(f, "%"PRIu32" triples\n", count);
 	} else if (!strcmp(op, "begin")) {
 		ctx->constructing	= 1;
 		ctx->query			= NULL;
@@ -687,57 +715,6 @@ static int triplestore_op(triplestore_t* t, struct server_runtime_ctx_s* ctx, in
 		triplestore_query_add_op(query, QUERY_FILTER, filter);
 		_triplestore_run_query(t, query, ctx, f);
 		triplestore_free_query(query);
-// 	} else if (!strcmp(op, "match")) {
-// 		const char* pattern	= argv[++i];
-// 		triplestore_match_terms(t, pattern, ^(nodeid_t id) {
-// 			if (f != NULL) {
-// 				char* string		= triplestore_term_to_string(t, t->graph[id]._term);
-// 				fprintf(f, "%-7"PRIu32" %s\n", id, string);
-// 				free(string);
-// 			}
-// 			return 0;
-// 		});
-// 	} else if (!strcmp(op, "ntriples")) {
-// 		triplestore_print_ntriples(t, stdout);
-// 	} else if (!strcmp(op, "load")) {
-// 		const char* filename	= argv[++i];
-// 		triplestore_load(t, filename, 0);
-// 	} else if (!strcmp(op, "dump")) {
-// 		const char* filename	= argv[++i];
-// 		triplestore_dump(t, filename);
-// 	} else if (!strcmp(op, "import")) {
-// 		const char* filename	= argv[++i];
-// 		if (triplestore__load_file(t, filename, 0)) {
-// 			fprintf(stderr, "Failed to import file %s\n", filename);
-// 		}
-// 	} else if (!strcmp(op, "debug")) {
-// 		fprintf(stdout, "Triplestore:\n");
-// 		fprintf(stdout, "- Nodes: %"PRIu32"\n", t->nodes_used);
-// 		for (uint32_t i = 1; i <= t->nodes_used; i++) {
-// 			char* s	= triplestore_term_to_string(t, t->graph[i]._term);
-// 			fprintf(stdout, "       %4d: %s (out head: %"PRIu32"; in head: %"PRIu32")\n", i, s, t->graph[i].out_edge_head, t->graph[i].in_edge_head);
-// 			free(s);
-// 			nodeid_t idx	= t->graph[i].out_edge_head;
-// 			while (idx != 0) {
-// 				nodeid_t s	= t->edges[idx].p;
-// 				nodeid_t p	= t->edges[idx].p;
-// 				nodeid_t o	= t->edges[idx].o;
-// 				fprintf(stdout, "       -> %"PRIu32" %"PRIu32" %"PRIu32"\n", s, p, o);
-// 				idx			= t->edges[idx].next_out;
-// 			}
-// 		}
-// 		fprintf(stdout, "- Edges: %"PRIu32"\n", t->edges_used);
-// 	} else if (!strcmp(op, "data")) {
-// 		triplestore_print_data(t, stdout);
-// 	} else if (!strcmp(op, "nodes")) {
-// 		triplestore_node_dump(t, stdout);
-// 	} else if (!strcmp(op, "edges")) {
-// 		triplestore_edge_dump(t, stdout);
-// 	} else if (!strcmp(op, "triple")) {
-// 		int64_t s	= atoi(argv[++i]);
-// 		int64_t p	= atoi(argv[++i]);
-// 		int64_t o	= atoi(argv[++i]);
-// 		triplestore_print_match(t, s, p, o, f);
 	} else if (!strcmp(op, "count")) {
 		query_t* query		= ctx->query;
 		if (!query) {
@@ -810,13 +787,13 @@ static int triplestore_op(triplestore_t* t, struct server_runtime_ctx_s* ctx, in
 // 			ctx->query			= NULL;
 // 		}
 	} else {
-		fprintf(stderr, "Unrecognized operation '%s'\n", op);
+		fprintf(stderr, "Unrecognized operation '%s' (%p)\n", op, op);
 		return server_ctx_set_error(ctx, "Unrecognized operation");
 	}
 	return 0;
 }
 
-int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, FILE* out) {
+int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query, FILE* out) {
 	__block struct server_runtime_ctx_s ctx	= {
 		.error				= 0,
 		.error_message		= NULL,
@@ -838,38 +815,41 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, F
 		},
 	};
 	
-	size_t allocated	= 1024;
-	char* line	= malloc(allocated);
-	ssize_t read;
 	int output	= 0;
-	while ((read = getline(&line, &allocated, in)) > 0) {
-		int endpos	= read-1;
-		while (endpos >= 0 && (line[endpos] == '\n' || line[endpos] == '\r')) {
-			line[endpos]	= '\0';
-			endpos--;
+	char* ptr	= query;
+	
+// 	fprintf(stderr, "query: «%s»\n", query);
+	while (1) {
+		char* end;
+		if ((end = strstr(ptr, "\r"))) {
+			*end	= '\0';
+		} else if ((end = strstr(ptr, "\n"))) {
+			*end	= '\0';
+		} else {
+			end		= strstr(ptr, "\0");
 		}
+		if (!end) {
+			return 1;
+		}
+		
+		int linelen	= end - ptr + 1;
+// 		fprintf(stderr, "line length: %d\n", linelen);
 
 		int argc_max	= 16;
 		char* argv[argc_max];
-		int len	= strlen(line);
-		char* buffer	= malloc(1+len);
-		strcpy(buffer, line);
 		int argc	= 1;
-		argv[0]		= buffer;
-		for (int i = 0; i < len; i++) {
-			if (argc >= argc_max) {
-				free(buffer);
-				free(line);
-				return 1;
-			}
-			if (buffer[i] == ' ') {
-				int j	= i;
-				while (j < len && buffer[j] == ' ') {
-					buffer[j++] = '\0';
-				}
-				argv[argc++]	= &(buffer[j]);
+		argv[0]		= ptr;
+		for (int i = 1; i < linelen; i++) {
+			if (ptr[i] == ' ') {
+				ptr[i]	= '\0';
+			} else if (ptr[i-1] == '\0') {
+				argv[argc++]	= &(ptr[i]);
 			}
 		}
+		
+// 		for (int i = 0; i < argc; i++) {
+// 			fprintf(stderr, "arg %d: %s\n", i, argv[i]);
+// 		}
 		
 		if (triplestore_output_op(t, &ctx, argc, argv)) {
 			if (s->use_http) {
@@ -878,10 +858,8 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, F
 			output++;
 		}
 		int r	= triplestore_op(t, &ctx, argc, argv);
-		free(buffer);
 
 		if (r) {
-			free(line);
 			write_http_error_header(&ctx, out, 400, "Bad Request");
 			return 1;
 		}
@@ -889,12 +867,48 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, F
 		if (ctx.constructing == 0) {
 			break;
 		}
+		
+		ptr	+= linelen;
 	}
-	free(line);
 
 	if (!output) {
 		write_http_error_header(&ctx, out, 400, "Bad Request");
 		return 1;
 	}
 	return 0;
+}
+
+int triplestore_read_and_run_query(triplestore_server_t* server, triplestore_t* t, FILE* in, FILE* out) {
+	int length	= 0;
+	char* buffer	= calloc(1, server->buffer_size);
+	if (server->use_http) {
+		if (read_http_header(server, in, &length)) {
+			return 1;
+		}
+	} else {
+		length	= server->buffer_size-1;
+	}
+	
+	size_t total			= 0;
+	assert(length < server->buffer_size);
+	
+	const int needed		= length;
+	while (total < needed) {
+		size_t bytes	= fread(&(buffer[total]), 1, needed-total, in);
+// 		fprintf(stderr, "- %zu\n", bytes);
+		if (bytes == 0) {
+			break;
+		}
+		total			+= bytes;
+	}
+	
+// 	fprintf(stderr, "read %zu query bytes\n", total);
+	if ((total == 0) || buffer[total] != '\0') {
+		free(buffer);
+		return 1;
+	}
+	
+	int r	= triplestore_run_query(server, t, buffer, out);
+	free(buffer);
+	return r;
 }

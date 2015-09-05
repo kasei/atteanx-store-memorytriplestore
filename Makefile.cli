@@ -12,7 +12,7 @@ CC		= clang
 
 %.o: %.h %.c
 
-all: ts runner server fuzz
+all: ts server
 
 ts: ts.c triplestore.o avl.o linenoise.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o

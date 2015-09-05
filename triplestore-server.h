@@ -25,14 +25,16 @@ struct server_runtime_ctx_s {
 typedef struct triplestore_server_s {
 	short port;
 	dispatch_queue_t queue;
+	dispatch_queue_t sync_queue;
 	int fd;
 	int use_http;
+	int buffer_size;
 } triplestore_server_t;
 
 triplestore_server_t* triplestore_new_server(short port, int use_http);
 int triplestore_free_server(triplestore_server_t* s);
 
 int triplestore_run_server(triplestore_server_t* s, triplestore_t* t);
-int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, FILE* out);
+int triplestore_read_and_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, FILE* out);
 
 #endif
