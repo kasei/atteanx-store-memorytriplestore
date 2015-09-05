@@ -436,22 +436,22 @@ int triplestore_expand_nodes(triplestore_t* t) {
 
 static int _write32(int fd, uint32_t value) {
 	uint32_t l	= htonl(value);
-	return write(fd, &l, sizeof(uint32_t));
+	return (int) write(fd, &l, sizeof(uint32_t));
 }
 
 static int _writeterm(int fd, rdf_term_t* term) {
 	uint32_t type	= (uint32_t) term->type;
 	uint32_t extra_int	= 0;
 	if (type == TERM_LANG_LITERAL) {
-		extra_int	= strlen((char*) &(term->vtype.value_type));
+		extra_int	= (int) strlen((char*) &(term->vtype.value_type));
 	} else if (type == TERM_TYPED_LITERAL) {
-		extra_int	= term->vtype.value_id;
+		extra_int	= (int) term->vtype.value_id;
 	} else if (type == TERM_BLANK) {
-		extra_int	= term->vtype.value_id;
+		extra_int	= (int) term->vtype.value_id;
 	}
 	
 	char buffer[12];
-	int vlen	= strlen(term->value);
+	int vlen	= (int) strlen(term->value);
 	*((uint32_t*) &(buffer[0]))		= htonl(type);
 	*((uint32_t*) &(buffer[4]))		= htonl(extra_int);
 	*((uint32_t*) &(buffer[8]))		= htonl(vlen);
@@ -962,7 +962,7 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 				filter->re,					/* the compiled pattern */
 				NULL,						/* no extra data - we didn't study the pattern */
 				term->value,				/* the subject string */
-				strlen(term->value),		/* the length of the subject */
+				(int) strlen(term->value),	/* the length of the subject */
 				0,							/* start at offset 0 in the subject */
 				0,							/* default options */
 				ovector,					/* output vector for substring information */
@@ -1200,7 +1200,6 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 	int r	= 0;
 	if (path->type == PATH_STAR || path->type == PATH_PLUS) {
 		char* seen	= calloc(1, t->nodes_used);
-		int r;
 		
 		int64_t start	= path->start;
 //		fprintf(stderr, "matching path with start %"PRId64"\n", start);
@@ -1235,7 +1234,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 			});
 			free(starts);
 		} else {
-			r	= _triplestore_path_step(t, start, path->pred, seen, 0, ^(nodeid_t reached) {
+			r	= _triplestore_path_step(t, (nodeid_t)start, path->pred, seen, 0, ^(nodeid_t reached) {
 				if (path->end < 0) {
 					current_match[-(path->end)] = reached;
 				}
@@ -1349,10 +1348,10 @@ int triplestore_ensure_variable_capacity(query_t* query, int var) {
 
 int64_t triplestore_query_add_variable(query_t* query, const char* name) {
 	int64_t var = 1 + query->variables;
-	if (triplestore_ensure_variable_capacity(query, var) < 0) {
+	if (triplestore_ensure_variable_capacity(query, (int) var) < 0) {
 		return 0;
 	}
-	if (triplestore_query_set_variable_name(query, var, name)) {
+	if (triplestore_query_set_variable_name(query, (int) var, name)) {
 		return 0;
 	}
 	return -var;
@@ -1657,8 +1656,8 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 			nodeid_t o	= t->edges[idx].o;
 			if (_p <= 0 || _p == p) {
 				if (_o <= 0 || _o == o) {
-					if (repeated_vars_ok(_s, p, o)) {
-						if (block(t, _s, p, o)) {
+					if (repeated_vars_ok((nodeid_t)_s, p, o)) {
+						if (block(t, (nodeid_t)_s, p, o)) {
 							return 1;
 						}
 					}
@@ -1681,8 +1680,8 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 			nodeid_t s	= t->edges[idx].s;
 			if (_p <= 0 || _p == p) {
 				if (_s <= 0 || _s == s) {
-					if (repeated_vars_ok(s, p, _o)) {
-						if (block(t, s, p, _o)) {
+					if (repeated_vars_ok(s, p, (nodeid_t)_o)) {
+						if (block(t, s, p, (nodeid_t)_o)) {
 							return 1;
 						}
 					}
@@ -1815,7 +1814,7 @@ static void _write_term_or_variable(triplestore_t* t, int variables, char** vari
 		write(fd, "?", 1);
 		write(fd, variable_names[-s], strlen(variable_names[-s]));
 	} else {
-		triplestore_write_term(t, s, fd);
+		triplestore_write_term(t, (nodeid_t)s, fd);
 	}
 }
 
@@ -1825,7 +1824,7 @@ static void _print_term_or_variable(triplestore_t* t, int variables, char** vari
 	} else if (s < 0) {
 		fprintf(f, "?%s", variable_names[-s]);
 	} else {
-		triplestore_print_term(t, s, f, 0);
+		triplestore_print_term(t, (nodeid_t)s, f, 0);
 	}
 }
 

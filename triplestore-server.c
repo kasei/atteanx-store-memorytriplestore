@@ -583,15 +583,16 @@ static int triplestore_op(triplestore_t* t, struct server_runtime_ctx_s* ctx, in
 			s	= atoi(ss);
 		} else {
 			s	= var--;
-			triplestore_ensure_variable_capacity(query, -s);
-			triplestore_query_set_variable_name(query, -s, ss);
+			triplestore_ensure_variable_capacity(query, -((int)s));
+			triplestore_query_set_variable_name(query, -((int)s), ss);
 		}
 
 		if (isdigit(os[0])) {
 			o	= atoi(os);
 		} else {
 			o	= var--;
-			triplestore_query_set_variable_name(query, -o, os);
+            triplestore_ensure_variable_capacity(query, -((int)o));
+			triplestore_query_set_variable_name(query, -((int)o), os);
 		}
 
 		path_t* path	= triplestore_new_path(t, PATH_PLUS, s, (nodeid_t) p, o);
@@ -832,7 +833,7 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 			return 1;
 		}
 		
-		int linelen	= end - ptr + 1;
+		long linelen	= end - ptr + 1;
 // 		fprintf(stderr, "line length: %d\n", linelen);
 
 		int argc_max	= 16;
@@ -880,7 +881,6 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 
 int triplestore_read_and_run_query(triplestore_server_t* server, triplestore_t* t, FILE* in, FILE* out) {
 	int length	= 0;
-	char* buffer	= calloc(1, server->buffer_size);
 	if (server->use_http) {
 		if (read_http_header(server, in, &length)) {
 			return 1;
@@ -893,6 +893,7 @@ int triplestore_read_and_run_query(triplestore_server_t* server, triplestore_t* 
 	assert(length < server->buffer_size);
 	
 	const int needed		= length;
+    char* buffer	= calloc(1, server->buffer_size);
 	while (total < needed) {
 		size_t bytes	= fread(&(buffer[total]), 1, needed-total, in);
 // 		fprintf(stderr, "- %zu\n", bytes);
