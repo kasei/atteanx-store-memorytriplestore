@@ -295,7 +295,7 @@ triplestore__term_to_id1(triplestore_t *store, int type, char* value)
 		nodeid_t id;
 	CODE:
 		term = triplestore_new_term(store, type, value, NULL, 0);
-		id = triplestore_get_term(store, term);
+		id = triplestore_get_termid(store, term);
 		RETVAL = (int) id;
 	OUTPUT:
 		RETVAL
@@ -307,7 +307,7 @@ triplestore__term_to_id2(triplestore_t *store, int type, char* value, char* extr
 		nodeid_t id;
 	CODE:
 		term = triplestore_new_term(store, type, value, extra, 0);
-		id = triplestore_get_term(store, term);
+		id = triplestore_get_termid(store, term);
 		RETVAL = (int) id;
 	OUTPUT:
 		RETVAL
@@ -319,7 +319,7 @@ triplestore__term_to_id3(triplestore_t *store, int type, char* value, int vid)
 		nodeid_t id;
 	CODE:
 		term = triplestore_new_term(store, type, value, NULL, vid);
-		id = triplestore_get_term(store, term);
+		id = triplestore_get_termid(store, term);
 		RETVAL = (int) id;
 	OUTPUT:
 		RETVAL
