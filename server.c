@@ -1,24 +1,9 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include "commands.h"
 #include "triplestore-server.h"
 
 #pragma mark -
-
-void help(FILE* f) {
-	fprintf(f, "Commands:\n");
-	fprintf(f, "  help\n");
-	fprintf(f, "  match PATTERN\n");
-	fprintf(f, "  ntriples\n");
-	fprintf(f, "  data\n");
-	fprintf(f, "  nodes\n");
-	fprintf(f, "  edges\n");
-	fprintf(f, "  bgp S1 P1 O1 S2 P2 O2 ...\n");
-	fprintf(f, "  triple S P O\n");
-	fprintf(f, "  filter starts|ends|contains VAR STRING S1 P1 O1 S2 P2 O2 ...\n");
-	fprintf(f, "  filter re VAR PATTERN FLAGS S1 P1 O1 S2 P2 O2 ...\n");
-	fprintf(f, "  agg GROUPVAR COUNT VAR S1 P1 O1 S2 P2 O2 ...\n");
-	fprintf(f, "\n");
-}
 
 void usage(int argc, char** argv, FILE* f) {
 	fprintf(f, "Usage: %s PORT input.nt\n\n", argv[0]);
@@ -27,7 +12,6 @@ void usage(int argc, char** argv, FILE* f) {
 int main (int argc, char** argv) {
 	if (argc > 1 && !strcmp(argv[1], "--help")) {
 		usage(argc, argv, stdout);
-		help(stdout);
 		return 0;
 	}
 	
@@ -38,7 +22,7 @@ int main (int argc, char** argv) {
 	const int max_nodes		= 65536;
 	triplestore_t* t		= new_triplestore(max_nodes, max_edges);
 
-	__block struct server_runtime_ctx_s ctx	= {
+	__block struct command_ctx_s ctx	= {
 		.error				= 0,
 		.start				= triplestore_current_time(),
 		.constructing		= 0,

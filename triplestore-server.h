@@ -13,14 +13,14 @@
 #include <sys/stat.h>
 #include "triplestore.h"
 
-struct server_runtime_ctx_s {
-	int error;
-	char* error_message;
-	double start;
-	query_t* query;
-	int constructing;
-	void(^result_block)(query_t* query, nodeid_t* final_match);
-};
+// struct server_runtime_ctx_s {
+// 	int error;
+// 	char* error_message;
+// 	double start;
+// 	query_t* query;
+// 	int constructing;
+// 	void(^result_block)(query_t* query, nodeid_t* final_match);
+// };
 
 typedef struct triplestore_server_s {
 	short port;

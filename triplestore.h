@@ -1,3 +1,6 @@
+#ifndef _TRIPLESTORE_H
+#define _TRIPLESTORE_H
+
 #include <pcre.h>
 #include <raptor2.h>
 #include <stdint.h>
@@ -157,6 +160,7 @@ double triplestore_current_time ( void );
 double triplestore_elapsed_time ( double start );
 
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid);
+rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id);
 void free_rdf_term(rdf_term_t* t);
 int triplestore_size(triplestore_t* t);
 
@@ -165,7 +169,7 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges);
 int free_triplestore(triplestore_t* t);
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp);
 nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm);
-nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm);
+nodeid_t triplestore_get_termid(triplestore_t* t, rdf_term_t* myterm);
 
 
 int triplestore_dump(triplestore_t* t, const char* filename);
@@ -220,3 +224,5 @@ uint32_t* triplestore_table_row_ptr(table_t* table, int row);
 project_t* triplestore_new_project(triplestore_t* t, int variables);
 int triplestore_free_project(project_t* project);
 int triplestore_set_projection(project_t* project, int64_t var);
+
+#endif

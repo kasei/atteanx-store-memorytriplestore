@@ -14,14 +14,14 @@ CC		= clang
 
 all: ts server
 
-ts: ts.c triplestore.o avl.o linenoise.o
-	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o
+ts: ts.c triplestore.o avl.o linenoise.o commands.o
+	$(CC) $(LDLIBS) $(CFLAGS) -o ts ts.c triplestore.o avl.o linenoise.o commands.o
 
 runner: runner.c triplestore.o avl.o linenoise.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o runner runner.c triplestore.o avl.o linenoise.o
 
-server: server.c triplestore.o avl.o linenoise.o triplestore-server.o
-	$(CC) $(LDLIBS) $(CFLAGS) -o server server.c triplestore.o avl.o linenoise.o triplestore-server.o
+server: server.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
+	$(CC) $(LDLIBS) $(CFLAGS) -o server server.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
 
 fuzz: fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o fuzz fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o

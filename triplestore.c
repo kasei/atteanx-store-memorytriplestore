@@ -84,6 +84,11 @@ static const char* _parse_results ( int rc, int pos, const char* value, int* ove
 }
 
 
+rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id) {
+	rdf_term_t* term	= t->graph[id]._term;
+	return term;
+}
+
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
 	char* v				= malloc(sizeof(rdf_term_t) + strlen(value) + 1);
@@ -929,6 +934,7 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 				break;
 			}
 			if (strlen(term->value) >= strlen(filter->string2)) {
+// 				fprintf(stderr, "'%s' ~~ '%s'\n", term->value, filter->string2);
 				if (strstr(term->value, filter->string2) != NULL) {
 					break;
 				}
@@ -1509,7 +1515,7 @@ static rdf_term_t* term_from_raptor_term(triplestore_t* store, raptor_term* t, i
 	}
 }
 
-nodeid_t triplestore_get_term(triplestore_t* t, rdf_term_t* myterm) {
+nodeid_t triplestore_get_termid(triplestore_t* t, rdf_term_t* myterm) {
 	hx_nodemap_item i;
 	i._term			= myterm;
 	i.id			= 0;
