@@ -277,9 +277,10 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 
 int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* query, const char* ts) {
 	int64_t id	= 0;
-	if (isdigit(ts[0])) {
-		id			= atoi(ts);
-	} else if (ts[0] == '<') {
+// 	if (isdigit(ts[0])) {
+// 		id			= atoi(ts);
+// 	} else
+	if (ts[0] == '<') {
 		char* p	= strstr(ts, ">");
 		if (!p) {
 			return 0;
@@ -747,6 +748,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		return 0;
 	} else if (!strcmp(op, "agg")) {
+		if (argc < (i + 4)) {
+			ctx->set_error(-1, "Insufficient arguments passed to AGG");
+			return 1;
+		}
 		const char* gs		= argv[++i];
 		const char* op		= argv[++i];
 		const char* vs		= argv[++i];
@@ -755,6 +760,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			query		= ctx->query;
 		} else {
 			query		= construct_bgp_query(t, ctx, argc, argv, i);
+		}
+		if (!query) {
+			ctx->set_error(-1, "No query object present in AGG");
+			return 1;
 		}
 		int64_t groupvar	= triplestore_query_get_variable_id(query, gs);
 		if (groupvar == 0) {

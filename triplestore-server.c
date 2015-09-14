@@ -374,25 +374,30 @@ static int write_tsv_results_header(FILE* f, query_t* query) {
 			fprintf(f, "?%s\n", query->variable_names[j]);
 		}
 	}
+	return 0;
 }
 
-static int write_http_header(FILE* out, int code, const char* message) {
+static int write_http_header(FILE* out, int code, const char* message, char* contenttype) {
 // 	fprintf(stderr, "writing HTTP header %03d\n", code);
 	time_t now		= time(0);
 	struct tm tm	= *gmtime(&now);
 	char* buf		= alloca(256);
 	strftime(buf, 256, "%a, %d %b %Y %H:%M:%S %Z", &tm);
 	
+	if (!contenttype) {
+		contenttype	= "text/plain";
+	}
+	
 	fprintf(out, "HTTP/1.1 %03d %s\r\n"
-				"Content-Type: text/tab-separated-values; charset=utf-8\r\n"
+				"Content-Type: %s\r\n"
 				"Date: %s\r\n"
 				"Server: MemoryTripleStore\r\n"
-				"\r\n", code, message, buf);
+				"\r\n", code, message, contenttype, buf);
 	return 0;
 }
 
 static int write_http_error_header(struct command_ctx_s* ctx, FILE* out, int code, const char* message) {
-	if (write_http_header(out, code, message)) {
+	if (write_http_header(out, code, message, "text/plain")) {
 		return 1;
 	}
 	if (ctx->error_message) {
@@ -676,38 +681,57 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 // 		fprintf(stderr, "line length: %d\n", linelen);
 
 		int argc_max	= 16;
-		char* argv[argc_max];
-		int argc	= 1;
-		argv[0]		= ptr;
-		for (int i = 1; i < linelen; i++) {
-			if (ptr[i] == ' ') {
+		char** argv		= calloc(sizeof(char*), argc_max);
+		int argc		= 0;
+		argv[argc++]	= ptr;
+		for (int i = 1; i < (linelen-1); i++) {
+			if (ptr[i] == '\0') {
+				free(argv);
+				fprintf(stderr, "Unexpected NULL byte in triplestore_run_query\n");
+				write_http_error_header(&ctx, out, 400, "Bad Request");
+				return 1;
+			} else if (ptr[i] == ' ') {
 				ptr[i]	= '\0';
 			} else if (ptr[i-1] == '\0') {
-				argv[argc++]	= &(ptr[i]);
+				if (argc > argc_max) {
+					argc_max	*= 2;
+					argv	= realloc(argv, sizeof(char*) * argc_max);
+					if (!argv) {
+						write_http_error_header(&ctx, out, 500, "Internal Server Error");
+						return 1;
+					}
+				}
+				char* p	= &(ptr[i]);
+				argv[argc++]	= p;
 			}
 		}
 		
 		if (triplestore_output_op(t, &ctx, argc, argv)) {
 			if (s->use_http) {
-				write_http_header(out, 200, "OK");
+				write_http_header(out, 200, "OK", "text/tab-separated-values; charset=utf-8");
 			}
 			output++;
 		}
 		int r	= triplestore_op(t, &ctx, argc, argv);
 
 		if (r) {
+			fprintf(stderr, "triplestore_op failed in triplestore_run_query\n");
 			write_http_error_header(&ctx, out, 400, "Bad Request");
+			free(argv);
 			return 1;
 		}
 		
 		if (ctx.constructing == 0) {
+			free(argv);
 			break;
 		}
 		
 		ptr	+= linelen;
+		free(argv);
 	}
 
 	if (!output) {
+		fprintf(stderr, "No output in triplestore_run_query\n");
 		write_http_error_header(&ctx, out, 400, "Bad Request");
 		return 1;
 	}
@@ -725,11 +749,11 @@ int triplestore_read_and_run_query(triplestore_server_t* server, triplestore_t* 
 		length	= server->buffer_size-1;
 	}
 	
-	size_t total			= 0;
+	size_t total		= 0;
 	assert(length < server->buffer_size);
 	
-	const int needed		= length;
-    char* buffer	= calloc(1, server->buffer_size);
+	const int needed	= length;
+    char* buffer		= calloc(1, server->buffer_size);
 	while (total < needed) {
 		size_t bytes	= fread(&(buffer[total]), 1, needed-total, in);
 // 		fprintf(stderr, "- %zu\n", bytes);
