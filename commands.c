@@ -201,6 +201,11 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 	while (i+1 < argc) {
 		int index			= j++;
 		const char* ts		= argv[++i];
+		if (!ts) {
+			fprintf(stderr, "Empty string argument passed to construct_bgp_query\n");
+			free(ids);
+			return NULL;
+		}
 		int64_t id			= query_node_id(t, ctx, query, ts);
 		if (!id) {
 			fprintf(stderr, "No node ID found for BGP term %s\n", ts);
@@ -373,6 +378,16 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		return 1;
 	}
 	
+	if (0) {
+		fprintf(stderr, "TRIPLESTORE_OP '%s'\n", argv[0]);
+		if (argc == 1) {
+			fprintf(stderr, "***\n");
+		}
+		for (int j = 1; j < argc; j++) {
+			fprintf(stderr, "[%d] %s\n", j, argv[j]);
+		}
+	}
+	
 	int i	= 0;
 	FILE* f	= ctx->print ? stdout : NULL;
 	const char* op			= argv[i];
@@ -380,18 +395,38 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "help")) {
 		help(f);
 	} else if (!strcmp(op, "set")) {
+		if (argc < (i + 1 + 1)) {
+			ctx->set_error(-1, "Insufficient arguments passed to BGP");
+			return 1;
+		}
+
 		const char* field	= argv[++i];
 		if (!strcmp(field, "print")) {
 			ctx->print	= 1;
 		} else if (!strcmp(field, "verbose")) {
 			ctx->verbose	= 1;
 		} else if (!strcmp(field, "limit")) {
+			if (argc < (i + 1 + 1)) {
+				ctx->set_error(-1, "Insufficient arguments passed to BGP");
+				return 1;
+			}
+
 			ctx->limit	= atoll(argv[++i]);
 		} else if (!strcmp(field, "language")) {
+			if (argc < (i + 1 + 1)) {
+				ctx->set_error(-1, "Insufficient arguments passed to BGP");
+				return 1;
+			}
+
 			ctx->language	= calloc(1, 1+strlen(argv[i+1]));
 			strcpy(ctx->language, argv[++i]);
 		}
 	} else if (!strcmp(op, "unset")) {
+		if (argc < (i + 1 + 1)) {
+			ctx->set_error(-1, "Insufficient arguments passed to BGP");
+			return 1;
+		}
+
 		const char* field	= argv[++i];
 		if (!strcmp(field, "print")) {
 			ctx->print	= 0;
@@ -410,12 +445,14 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			ctx->query	= construct_bgp_query(t, ctx, argc, argv, i);
 			if (!ctx->query) {
 				ctx->set_error(-1, "Failed to build query object in BEGIN");
+				return 1;
 			}
 		}
 	} else if (!strcmp(op, "end")) {
 		query_t* query	= ctx->query;
 		if (!query) {
 			ctx->set_error(-1, "No query object present in END");
+			return 1;
 		}
 		ctx->query	= NULL;
 		ctx->constructing	= 0;
@@ -426,6 +463,11 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			fprintf(stderr, "No query available\n");
 		}
 	} else if (!strcmp(op, "bgp")) {
+		if (argc < (i + 1 + 3)) {
+			ctx->set_error(-1, "Insufficient arguments passed to BGP");
+			return 1;
+		}
+
 		if (ctx->constructing && ctx->query) {
 			fprintf(stderr, "*** Cannot add a BGP to an existing query\n");
 			ctx->constructing	= 0;
@@ -505,6 +547,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		triplestore_query_add_op(ctx->query, QUERY_SORT, sort);
 	} else if (!strcmp(op, "sort")) {
+		if (argc < (i + 1 + 1)) {
+			ctx->set_error(-1, "Insufficient arguments passed to SORT");
+			return 1;
+		}
 		if (ctx->constructing == 0) {
 			ctx->set_error(-1, "SORT can only be used during query construction");
 			return 1;
@@ -529,6 +575,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		triplestore_query_add_op(ctx->query, QUERY_SORT, sort);
 	} else if (!strcmp(op, "project")) {
+		if (argc < (i + 1 + 1)) {
+			ctx->set_error(-1, "Insufficient arguments passed to PROJECT");
+			return 1;
+		}
 		if (ctx->constructing == 0) {
 			ctx->set_error(-1, "project can only be used during query construction\n");
 			return 1;
@@ -551,6 +601,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		triplestore_query_add_op(ctx->query, QUERY_PROJECT, project);
 	} else if (!strcmp(op, "filter")) {
+		if (argc < (i + 1 + 2)) {
+			ctx->set_error(-1, "Insufficient arguments passed to FILTER");
+			return 1;
+		}
 		const char* op	= argv[++i];
 		const char* vs	= argv[++i];
 		query_t* query;
@@ -586,6 +640,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 				return 1;
 			}
 		} else {
+			if (argc < (i + 1 + 1)) {
+				ctx->set_error(-1, "Insufficient arguments passed to FILTER");
+				return 1;
+			}
 			const char* pat	= argv[++i];
 			int64_t patid		= query_node_id(t, ctx, query, pat);
 // 			rdf_term_t* term	= triplestore_new_term(t, patid); // TODO: XXX

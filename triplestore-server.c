@@ -9,7 +9,9 @@ static int server_ctx_set_error(struct command_ctx_s* ctx, char* message) {
 	if (!ctx->error_message) {
 		ctx->error_message	= message;
 	}
-	fprintf(stderr, "Error: %s\n", message);
+	if (0) {
+		fprintf(stderr, "Error: %s\n", message);
+	}
 	return 1;
 }
 
@@ -656,7 +658,9 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 	};
 	
 	ctx.set_error	= ^(int code, const char* message){
-		fprintf(stderr, "*** set_error called: %s\n", message);
+		if (0) {
+			fprintf(stderr, "*** set_error called: %s\n", message);
+		}
 		server_ctx_set_error(&ctx, (char*) message);
 	};
 	
@@ -687,7 +691,9 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 		for (int i = 1; i < (linelen-1); i++) {
 			if (ptr[i] == '\0') {
 				free(argv);
-				fprintf(stderr, "Unexpected NULL byte in triplestore_run_query\n");
+				if (0) {
+					fprintf(stderr, "Unexpected NULL byte in triplestore_run_query\n");
+				}
 				write_http_error_header(&ctx, out, 400, "Bad Request");
 				return 1;
 			} else if (ptr[i] == ' ') {
@@ -703,6 +709,20 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 				}
 				char* p	= &(ptr[i]);
 				argv[argc++]	= p;
+				if (*p == '"') {
+					while (ptr[i]) {
+						if (ptr[i] == '\\') {
+							i++;
+							if (ptr[i] == '\0') {
+								break;
+							}
+						}
+						i++;
+						if (ptr[i] == '"') {
+							break;
+						}
+					}
+				}
 			}
 		}
 		
@@ -712,10 +732,15 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 			}
 			output++;
 		}
+		
+		if (argc == 1 && !strcmp(argv[0], "")) {
+			goto loop_cleanup;
+		}
 		int r	= triplestore_op(t, &ctx, argc, argv);
-
 		if (r) {
-			fprintf(stderr, "triplestore_op failed in triplestore_run_query\n");
+			if (0) {
+				fprintf(stderr, "triplestore_op failed in triplestore_run_query\n");
+			}
 			write_http_error_header(&ctx, out, 400, "Bad Request");
 			free(argv);
 			return 1;
@@ -726,12 +751,15 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 			break;
 		}
 		
+loop_cleanup:
 		ptr	+= linelen;
 		free(argv);
 	}
 
 	if (!output) {
-		fprintf(stderr, "No output in triplestore_run_query\n");
+		if (0) {
+			fprintf(stderr, "No output in triplestore_run_query\n");
+		}
 		write_http_error_header(&ctx, out, 400, "Bad Request");
 		return 1;
 	}
