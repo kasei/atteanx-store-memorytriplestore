@@ -10,6 +10,11 @@ void usage(int argc, char** argv, FILE* f) {
 }
 
 int main (int argc, char** argv) {
+	if (argc == 1) {
+		usage(argc, argv, stdout);
+		return 0;
+	}
+	
 	if (argc > 1 && !strcmp(argv[1], "--help")) {
 		usage(argc, argv, stdout);
 		return 0;
@@ -58,7 +63,7 @@ int main (int argc, char** argv) {
 	
 	int use_http	= 1;
 	triplestore_server_t* server	= triplestore_new_server(port, use_http);
-	signal(SIGPIPE, SIG_IGN);
+// 	signal(SIGPIPE, SIG_IGN);
 	triplestore_run_server(server, t);
 	triplestore_free_server(server);
 	free_triplestore(t);

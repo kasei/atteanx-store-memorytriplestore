@@ -517,6 +517,9 @@ int triplestore_run_server(triplestore_server_t* s, triplestore_t* t) {
 				exit(1);
 			}
             
+			int set	= 1;
+			setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
+
 //            double accept_time    = triplestore_elapsed_time(start);
             outstanding++;
             if (outstanding > highwater) {
