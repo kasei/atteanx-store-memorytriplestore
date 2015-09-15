@@ -2,9 +2,10 @@
 #include "triplestore-server.h"
 #include "commands.h"
 
-#pragma mark -
-
 static void* consume(void* thunk);
+static int triplestore_server_push_client(triplestore_server_t* s, int sd);
+
+#pragma mark -
 
 static int server_ctx_set_error(struct command_ctx_s* ctx, char* message) {
 	ctx->error++;
@@ -146,8 +147,12 @@ int triplestore_free_server(triplestore_server_t* s) {
 //	dispatch_barrier_sync(s->sync_queue, ^{});	
 //	dispatch_release(s->queue);
 //	dispatch_release(s->sync_queue);
-	for (int i = 0; i < s->nthr; i++)
+	for (int i = 0; i < s->nthr; i++) {
+		triplestore_server_push_client(s, 0);
+	}
+	for (int i = 0; i < s->nthr; i++) {
 		pthread_join(s->threads[i], NULL);
+	}
 	free(s->ring);
 	free(s->buffer);
 
@@ -277,12 +282,12 @@ static void* consume(void* thunk) {
 				continue;
 			}
 
-			triplestore_read_and_run_query(s, s->t, f, f);
+			triplestore_read_and_run_query(s, f, f);
 			fclose(f);
 		}
 // 		fprintf(stderr, "ring is empty\n");
 		ck_pr_stall();
-		usleep(500);
+		usleep(5000);
 	}
 end_consume:
 	return NULL;
@@ -304,7 +309,7 @@ static int triplestore_server_push_client(triplestore_server_t* s, int sd) {
 // 			return;
 // 		}
 // 
-// 		triplestore_read_and_run_query(s, s->t, f, f);
+// 		triplestore_read_and_run_query(s, f, f);
 // 		fclose(f);
 // 		outstanding--;
 // //		double total_time  = triplestore_elapsed_time(start);
@@ -597,7 +602,8 @@ loop_cleanup:
 	return 0;
 }
 
-int triplestore_read_and_run_query(triplestore_server_t* server, triplestore_t* t, FILE* in, FILE* out) {
+int triplestore_read_and_run_query(triplestore_server_t* server, FILE* in, FILE* out) {
+	triplestore_t* t	= server->t;
 	int length	= 0;
 	if (server->use_http) {
 		if (read_http_header(server, in, &length)) {

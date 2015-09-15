@@ -35,6 +35,6 @@ triplestore_server_t* triplestore_new_server(short port, int use_http, triplesto
 int triplestore_free_server(triplestore_server_t* s);
 
 int triplestore_run_server(triplestore_server_t* s);
-int triplestore_read_and_run_query(triplestore_server_t* s, triplestore_t* t, FILE* in, FILE* out);
+int triplestore_read_and_run_query(triplestore_server_t* s, FILE* in, FILE* out);
 
 #endif

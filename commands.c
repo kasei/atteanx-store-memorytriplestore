@@ -288,6 +288,7 @@ int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* quer
 	if (ts[0] == '<') {
 		char* p	= strstr(ts, ">");
 		if (!p) {
+			fprintf(stderr, "cannot parse IRI value\n");
 			return 0;
 		}
 		long len	= p - ts;
@@ -308,8 +309,18 @@ int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* quer
 		snprintf(value, len, "%s", ts+1);
 		rdf_term_t* term	= NULL;
 		if (p[1] == '^') {
-			p += 4;
+			p++;
+			if (strncmp(p, "^^<", 3)) {
+				free(value);
+				fprintf(stderr, "cannot parse typed literal value\n");
+				return 0;
+			}
+			p += 3;
 			char* q	= strstr(p, ">");
+			if (!q) {
+				fprintf(stderr, "cannot parse typed literal value\n");
+				return 0;
+			}
 			int len	= q - p + 1;
 			char* dt	= malloc(1 + len);
 			snprintf(dt, len, "%s", p);
