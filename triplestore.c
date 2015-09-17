@@ -1263,9 +1263,18 @@ int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^b
 #pragma mark -
 #pragma mark Query
 
+int triplestore_query_get_max_variables(query_t* query) {
+	return query->max_variables;
+}
+
+int triplestore_query_set_max_variables(query_t* query, int max) {
+	query->max_variables	= max;
+}
+
 query_t* triplestore_new_query(triplestore_t* t, int variables) {
 	query_t* query			= calloc(sizeof(query_t), 1);
-	query->variables		= variables;
+// 	fprintf(stderr, "new query %p\n", query);
+	triplestore_query_set_max_variables(query, variables);
 	query->variable_names	= calloc(sizeof(char*), variables+1);
 	return query;
 }
@@ -1300,7 +1309,7 @@ int triplestore_free_query_op(query_op_t* op) {
 }
 
 int triplestore_free_query(query_t* query) {
-	for (int i = 0; i <= query->variables; i++) {
+	for (int i = 0; i <= triplestore_query_get_max_variables(query); i++) {
 		free(query->variable_names[i]);
 		query->variable_names[i]	= NULL;
 	}
@@ -1331,14 +1340,15 @@ int triplestore_query_set_variable_name(query_t* query, int variable, const char
 	}
 	
 	strcpy(query->variable_names[variable], name);
+// 	fprintf(stderr, "set variable ?%s\n", query->variable_names[variable]);
 	return 0;
 }
 
 int triplestore_ensure_variable_capacity(query_t* query, int var) {
-	if (var > query->variables) {
-		int previous_count	= query->variables;
-		query->variables	= var;
-		char** new_names	= calloc(sizeof(char*), 1+query->variables);
+	if (var > triplestore_query_get_max_variables(query)) {
+		int previous_count	= triplestore_query_get_max_variables(query);
+		triplestore_query_set_max_variables(query, var);
+		char** new_names	= calloc(sizeof(char*), 1+var);
 		if (!new_names) {
 			return -1;
 		}
@@ -1353,7 +1363,7 @@ int triplestore_ensure_variable_capacity(query_t* query, int var) {
 }
 
 int64_t triplestore_query_add_variable(query_t* query, const char* name) {
-	int64_t var = 1 + query->variables;
+	int64_t var = 1 + triplestore_query_get_max_variables(query);
 	if (triplestore_ensure_variable_capacity(query, (int) var) < 0) {
 		return 0;
 	}
@@ -1410,8 +1420,8 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
 //	triplestore_print_query(t, query, stderr);
-	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+query->variables);
-	current_match[0]	= query->variables;
+	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+triplestore_query_get_max_variables(query));
+	current_match[0]	= triplestore_query_get_max_variables(query);
 	query_op_t* op		= query->head;
 	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
 	free(current_match);
@@ -1426,7 +1436,7 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 			sort_t* sort	= (sort_t*) op->ptr;
 			table_t* table	= sort->table;
 			triplestore_table_sort(t, table, sort);
-			int size			= sizeof(nodeid_t) * (1+query->variables);
+			int size			= sizeof(nodeid_t) * (1+triplestore_query_get_max_variables(query));
 			nodeid_t* last		= calloc(1, size);
 			if (!last) {
 				return 1;
@@ -1836,11 +1846,11 @@ static void _print_term_or_variable(triplestore_t* t, int variables, char** vari
 
 void triplestore_print_path(triplestore_t* t, query_t* query, path_t* path, FILE* f) {
 	fprintf(f, "Path: ");
-	_print_term_or_variable(t, query->variables, query->variable_names, path->start, f);
+	_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, path->start, f);
 	fprintf(f, " ");
-	_print_term_or_variable(t, query->variables, query->variable_names, path->pred, f);
+	_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, path->pred, f);
 	fprintf(f, " ");
-	_print_term_or_variable(t, query->variables, query->variable_names, path->end, f);
+	_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, path->end, f);
 	fprintf(f, "\n");
 }
 
@@ -1866,29 +1876,29 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 	switch (filter->type) {
 		case FILTER_ISIRI:
 			fprintf(f, "ISIRI(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ")\n");
 			break;
 		case FILTER_ISLITERAL:
 			fprintf(f, "FILTER_ISLITERAL(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ")\n");
 			break;
 		case FILTER_ISBLANK:
 			fprintf(f, "ISBLANK(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ")\n");
 			break;
 		case FILTER_SAMETERM:
 			fprintf(f, "SAMETERM(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ", ");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node2, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node2, f);
 			fprintf(f, ")\n");
 			break;
 		case FILTER_CONTAINS:
 			fprintf(f, "CONTAINS(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ", \"%s\"", filter->string2);
 			if (filter->string2_lang) {
 				fprintf(f, "@%s", filter->string2_lang);
@@ -1897,7 +1907,7 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 			break;
 		case FILTER_STRSTARTS:
 			fprintf(f, "STRSTARTS(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ", \"%s\"", filter->string2);
 			if (filter->string2_lang) {
 				fprintf(f, "@%s", filter->string2_lang);
@@ -1906,7 +1916,7 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 			break;
 		case FILTER_STRENDS:
 			fprintf(f, "STRENDS(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ", \"%s\"", filter->string2);
 			if (filter->string2_lang) {
 				fprintf(f, "@%s", filter->string2_lang);
@@ -1915,7 +1925,7 @@ void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* 
 			break;
 		case FILTER_REGEX:
 			fprintf(f, "REGEX(");
-			_print_term_or_variable(t, query->variables, query->variable_names, filter->node1, f);
+			_print_term_or_variable(t, triplestore_query_get_max_variables(query), query->variable_names, filter->node1, f);
 			fprintf(f, ", \"%s\", \"%s\")\n", filter->string2, filter->string3);
 			break;
 		default:
@@ -1942,7 +1952,7 @@ void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** v
 
 void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op, FILE* f) {
 	if (op->type == QUERY_BGP) {
-		triplestore_print_bgp(t, op->ptr, query->variables, query->variable_names, f);
+		triplestore_print_bgp(t, op->ptr, triplestore_query_get_max_variables(query), query->variable_names, f);
 	} else if (op->type == QUERY_PROJECT) {
 		triplestore_print_project(t, query, op->ptr, f);
 	} else if (op->type == QUERY_SORT) {
@@ -1958,8 +1968,8 @@ void triplestore_print_query_op(triplestore_t* t, query_t* query, query_op_t* op
 
 void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f) {
 	fprintf(f, "--- QUERY ---\n");
-	fprintf(f, "Variables: %d\n", query->variables);
-	for (int v = 1; v <= query->variables; v++) {
+	fprintf(f, "Variables: %d\n", triplestore_query_get_max_variables(query));
+	for (int v = 1; v <= triplestore_query_get_max_variables(query); v++) {
 		fprintf(f, "  - %s\n", query->variable_names[v]);
 	}
 	

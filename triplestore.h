@@ -91,7 +91,8 @@ typedef struct query_op_s {
 } query_op_t;
 
 typedef struct query_s {
-	int variables;
+	double __padding;
+	int max_variables;
 	char** variable_names;
 	query_op_t* head;
 	query_op_t* tail;
@@ -192,6 +193,7 @@ int triplestore_ensure_variable_capacity(query_t* query, int var);
 int64_t triplestore_query_add_variable(query_t* query, const char* name);
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match));
+int triplestore_query_get_max_variables(query_t* query);
 
 // BGPs
 bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples);

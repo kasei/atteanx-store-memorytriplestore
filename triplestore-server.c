@@ -1,3 +1,5 @@
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <time.h>
 #include "triplestore-server.h"
 #include "commands.h"
@@ -46,7 +48,7 @@ static int64_t _triplestore_query_get_variable_id(query_t* query, const char* va
 	if (p[0] == '?') {
 		p++;
 	}
-	for (int x = 1; x <= query->variables; x++) {
+	for (int x = 1; x <= triplestore_query_get_max_variables(query); x++) {
 		const char* vname	= query->variable_names[x];
 		if (vname) {
 			if (!strcmp(p, vname)) {
@@ -85,7 +87,7 @@ static query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx,
 		ids[index]	= id;
 	}
 	
-	int possible_variables	= query->variables + 3*triples;
+	int possible_variables	= triplestore_query_get_max_variables(query) + 3*triples;
 	int* seen				= calloc(possible_variables, sizeof(int));
 	for (j = 0; j < triples; j++) {
 		int64_t s	= ids[3*j + 0];
@@ -130,14 +132,11 @@ triplestore_server_t* triplestore_new_server(short port, int use_http, triplesto
 //	server->queue		= dispatch_queue_create("us.kasei.triplestore.workers", DISPATCH_QUEUE_CONCURRENT);
 //	server->sync_queue	= dispatch_queue_create("us.kasei.triplestore.sync", NULL);
 	server->size		= 64;
-	server->nthr		= 16;
+	server->nthr		= 24;
 	server->ring		= calloc(server->nthr, sizeof(ck_ring_t));
 	server->buffer		= calloc(sizeof(ck_ring_buffer_t), server->size);
 	ck_ring_init(server->ring, server->size);
 	server->threads		= calloc(sizeof(pthread_t), server->nthr);
-	for (intptr_t i = 0; i < server->nthr; i++) {
-		pthread_create(&(server->threads[i]), NULL, consume, server);
-	}
 	
 	return server;
 }
@@ -151,18 +150,21 @@ int triplestore_free_server(triplestore_server_t* s) {
 		triplestore_server_push_client(s, 0);
 	}
 	for (int i = 0; i < s->nthr; i++) {
-		pthread_join(s->threads[i], NULL);
+		if (s->threads[i]) {
+			pthread_join(s->threads[i], NULL);
+			s->threads[i]	= NULL;
+		}
 	}
 	free(s->ring);
 	free(s->buffer);
-
+	free(s->threads);
 	close(s->fd);
 	free(s);
 	return 0;
 }
 
 static int write_tsv_results_header(FILE* f, query_t* query) {
-	int vars	= query->variables;
+	int vars	= triplestore_query_get_max_variables(query);
 	for (int j = 1; j <= vars; j++) {
 		if (j < vars) {
 			fprintf(f, "?%s\t", query->variable_names[j]);
@@ -269,25 +271,28 @@ static int new_socket ( short port ) {
 static void* consume(void* thunk) {
 	triplestore_server_t* s	= (triplestore_server_t*) thunk;
 	while (1) {
-		intptr_t sd;
-		while (ck_ring_dequeue_spmc(s->ring, s->buffer, &sd)) {
-			if (sd == 0) {
-				goto end_consume;
-			}
-			
-			FILE* f = fdopen(sd, "r+");
-			if (f == NULL) {
-				close(sd);
-				perror("");
-				continue;
-			}
-
-			triplestore_read_and_run_query(s, f, f);
-			fclose(f);
+		struct sockaddr_in peer;
+		socklen_t addrlen;
+		int sd	= accept(s->fd, (struct sockaddr*) &peer, &addrlen);
+		if (sd < 0) {
+			perror("Wrong connection");
+			usleep(50000);
+			continue;
 		}
-// 		fprintf(stderr, "ring is empty\n");
-		ck_pr_stall();
-		usleep(5000);
+		
+		// TODO: this seems to only work on darwin/bsd
+		int set = 1;
+		setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
+
+		FILE* f = fdopen(sd, "r+");
+		if (f == NULL) {
+			close(sd);
+			perror("");
+			continue;
+		}
+
+		triplestore_read_and_run_query(s, f, f);
+		fclose(f);
 	}
 end_consume:
 	return NULL;
@@ -323,7 +328,6 @@ int triplestore_run_server(triplestore_server_t* s) {
 		return 1;
 	}
 
-	struct sockaddr_in peer;
 	int status		= listen(s->fd, 1024);
 	if (status < 0) {
 		perror("Listen error");
@@ -336,48 +340,51 @@ int triplestore_run_server(triplestore_server_t* s) {
 		}
 	}
 	
-	int sd;
-	socklen_t addrlen;
-	
-	fd_set set;
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 250000;
-	
-	uint64_t count	= 0;
+	for (intptr_t i = 0; i < s->nthr; i++) {
+		pthread_create(&(s->threads[i]), NULL, consume, s);
+	}
+
+// 	int sd;
+// 	fd_set set;
+// 	struct timeval timeout;
+// 	timeout.tv_sec = 0;
+// 	timeout.tv_usec = 250000;
+// 	
+// 	uint64_t count	= 0;
 // 	__block int highwater = 0;
 // 	__block int outstanding = 0;
-	while (1) {
-		FD_ZERO(&set);
-		FD_SET(s->fd, &set);
-		int ready	= select(s->fd+1, &set, NULL, NULL, &timeout);
-		if (ready > 0) {
-//			fprintf(stderr, "Peer available. trying to accept\n");
-			uint64_t request_id	 = ++count;
-			addrlen = sizeof(peer);
-//			  double start	  = triplestore_current_time();
-			sd	= accept(s->fd, (struct sockaddr*) &peer, &addrlen);
-			if (sd < 0) {
-				perror("Wrong connection");
-				exit(1);
-			}
-			
-			int set = 1;
-			setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
-
-//			  double accept_time	= triplestore_elapsed_time(start);
-// 			outstanding++;
-// 			if (outstanding > highwater) {
-// 				fprintf(stderr, "[%"PRIu64"] Starting block with new highwater mark at %d\n", request_id, highwater);
-// 				highwater	= outstanding;
+// 	while (1) {
+// 		usleep(10000);
+// 		FD_ZERO(&set);
+// 		FD_SET(s->fd, &set);
+// 		int ready	= select(s->fd+1, &set, NULL, NULL, &timeout);
+// 		if (ready > 0) {
+// //			fprintf(stderr, "Peer available. trying to accept\n");
+// 			uint64_t request_id	 = ++count;
+// 			addrlen = sizeof(peer);
+// //			  double start	  = triplestore_current_time();
+// 			sd	= accept(s->fd, (struct sockaddr*) &peer, &addrlen);
+// 			if (sd < 0) {
+// 				perror("Wrong connection");
+// 				exit(1);
 // 			}
-//			fprintf(stderr, "Accepted connection on fd %d\n", sd);
-
-			triplestore_server_push_client(s, sd);
-		} else {
-			usleep(100000);
-		}
-	}
+// 			
+// 			int set = 1;
+// 			setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
+// 
+// //			  double accept_time	= triplestore_elapsed_time(start);
+// // 			outstanding++;
+// // 			if (outstanding > highwater) {
+// // 				fprintf(stderr, "[%"PRIu64"] Starting block with new highwater mark at %d\n", request_id, highwater);
+// // 				highwater	= outstanding;
+// // 			}
+// //			fprintf(stderr, "Accepted connection on fd %d\n", sd);
+// 
+// 			triplestore_server_push_client(s, sd);
+// 		} else {
+// 			usleep(100000);
+// 		}
+// 	}
 	return 0;
 }
 
@@ -460,7 +467,7 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 
 int serialize_result(triplestore_server_t* s, struct command_ctx_s* ctx, FILE* f, triplestore_t* t, query_t* query, nodeid_t* result) {
 	if (f != NULL) {
-		int vars	= query->variables;
+		int vars	= triplestore_query_get_max_variables(query);
 		for (int j = 1; j <= vars; j++) {
 			nodeid_t id = result[j];
 			if (id > 0) {
@@ -534,7 +541,7 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 			} else if (ptr[i] == ' ') {
 				ptr[i]	= '\0';
 			} else if (ptr[i-1] == '\0') {
-				if (argc > argc_max) {
+				if (argc >= argc_max) {
 					argc_max	*= 2;
 					argv	= realloc(argv, sizeof(char*) * argc_max);
 					if (!argv) {
@@ -544,16 +551,16 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 				}
 				char* p = &(ptr[i]);
 				argv[argc++]	= p;
-				if (*p == '"') {
+				if ('"' == ptr[i]) {
 					while (ptr[i]) {
-						if (ptr[i] == '\\') {
+						if ('\\' == ptr[i]) {
 							i++;
-							if (ptr[i] == '\0') {
+							if ('\0' == ptr[i]) {
 								break;
 							}
 						}
 						i++;
-						if (ptr[i] == '"') {
+						if ('"' == ptr[i]) {
 							break;
 						}
 					}
@@ -573,6 +580,10 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 		}
 		int r	= triplestore_op(t, &ctx, argc, argv);
 		if (r) {
+			if (ctx.query) {
+				triplestore_free_query(ctx.query);
+				ctx.query	= NULL;
+			}
 			if (0) {
 				fprintf(stderr, "triplestore_op failed in triplestore_run_query\n");
 			}
@@ -603,6 +614,11 @@ loop_cleanup:
 }
 
 int triplestore_read_and_run_query(triplestore_server_t* server, FILE* in, FILE* out) {
+	if (!in) {
+		fprintf(stderr, "Missing input file handle in triplestore_read_and_run_query\n");
+		return 1;
+	}
+	
 	triplestore_t* t	= server->t;
 	int length	= 0;
 	if (server->use_http) {
@@ -615,7 +631,7 @@ int triplestore_read_and_run_query(triplestore_server_t* server, FILE* in, FILE*
 	
 	size_t total		= 0;
 	assert(length < server->buffer_size);
-	
+
 	const int needed	= length;
 	char* buffer		= calloc(1, server->buffer_size);
 	while (total < needed) {

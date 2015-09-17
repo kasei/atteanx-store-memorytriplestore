@@ -43,7 +43,7 @@ int main (int argc, char** argv) {
 			fprintf(stderr, "%s\n", message);
 		},
 		.result_block		= ^(query_t* query, nodeid_t* final_match){
-			for (int j = 1; j <= query->variables; j++) {
+			for (int j = 1; j <= triplestore_query_get_max_variables(query); j++) {
 				nodeid_t id	= final_match[j];
 				if (id > 0) {
 					fprintf(stdout, "%s=", query->variable_names[j]);

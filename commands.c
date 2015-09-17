@@ -217,7 +217,7 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 		ids[index]	= id;
 	}
 	
-	int possible_variables	= query->variables + 3*triples;
+	int possible_variables	= triplestore_query_get_max_variables(query) + 3*triples;
 	int* seen				= calloc(possible_variables, sizeof(int));
 	for (j = 0; j < triples; j++) {
 		int64_t s	= ids[3*j + 0];
@@ -371,7 +371,7 @@ int64_t triplestore_query_get_variable_id(query_t* query, const char* var) {
 	if (p[0] == '?') {
 		p++;
 	}
-	for (int x = 1; x <= query->variables; x++) {
+	for (int x = 1; x <= triplestore_query_get_max_variables(query); x++) {
 		const char* vname	= query->variable_names[x];
 		if (vname) {
 			if (!strcmp(p, vname)) {
@@ -549,8 +549,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			ctx->set_error(-1, "No query object present in UNIQUE");
 			return 1;
 		}
-		sort_t* sort	= triplestore_new_sort(t, query->variables, query->variables, 1);
-		for (int j = 1; j <= query->variables; j++) {
+		
+		int vars	= triplestore_query_get_max_variables(query);
+		sort_t* sort	= triplestore_new_sort(t, vars, vars, 1);
+		for (int j = 1; j <= vars; j++) {
 			int64_t v	= -j;
 // 			const char* var	= query->variable_names[j];
 // 			fprintf(stderr, "setting sort variable #%d to ?%s (%"PRId64")\n", j-1, var, v);
@@ -573,7 +575,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		int svars		= argc-i-1;
 // 		fprintf(stderr, "%d sort variables\n", svars);
-		sort_t* sort	= triplestore_new_sort(t, query->variables, svars, 0);
+		sort_t* sort	= triplestore_new_sort(t, triplestore_query_get_max_variables(query), svars, 0);
 		for (int j = 0; j < svars; j++) {
 			const char* var	= argv[j+i+1];
 			int64_t v	= triplestore_query_get_variable_id(query, var);
@@ -599,7 +601,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			ctx->set_error(-1, "No query object present in PROJECT");
 			return 1;
 		}
-		project_t* project	= triplestore_new_project(t, query->variables);
+		project_t* project	= triplestore_new_project(t, triplestore_query_get_max_variables(query));
 		for (int j = i+1; j < argc; j++) {
 			const char* var	= argv[j];
 			int64_t v	= triplestore_query_get_variable_id(query, var);
@@ -755,7 +757,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			triplestore_print_query(t, query, stderr);
 		}
 		
-		table_t* table	= triplestore_new_table(query->variables);
+		table_t* table	= triplestore_new_table(triplestore_query_get_max_variables(query));
 		double start	= triplestore_current_time();
 		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
 			triplestore_table_add_row(table, final_match);
@@ -767,7 +769,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		if (f != NULL) {
 			for (int row = 0; row < count; row++) {
 				uint32_t* result	= triplestore_table_row_ptr(table, row);
-				for (int j = 1; j <= query->variables; j++) {
+				for (int j = 1; j <= triplestore_query_get_max_variables(query); j++) {
 					nodeid_t id	= result[j];
 					fprintf(f, "%s=", query->variable_names[j]);
 					triplestore_print_term(t, id, f, 0);

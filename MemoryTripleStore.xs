@@ -183,7 +183,7 @@ int64_t _triplestore_query_get_variable_id(query_t* query, const char* var) {
 	if (p[0] == '?') {
 		p++;
 	}
-	for (int x = 1; x <= query->variables; x++) {
+	for (int x = 1; x <= triplestore_query_get_max_variables(query); x++) {
 		if (!strcmp(p, query->variable_names[x])) {
 			v	= -x;
 			break;
@@ -407,7 +407,7 @@ void
 query__evaluate(query_t* query, triplestore_t* t, SV* closure)
 	CODE:
 		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
-			handle_new_result_object(t, closure, query->variables, query->variable_names, final_match);
+			handle_new_result_object(t, closure, triplestore_query_get_max_variables(query), query->variable_names, final_match);
 			return 0;
 		});
 
@@ -452,7 +452,7 @@ query__add_project (query_t* query, triplestore_t* t, AV* names)
 		SV** svp;
 		char* ptr;
 	CODE:
-		project_t* project	= triplestore_new_project(t, query->variables);
+		project_t* project	= triplestore_new_project(t, triplestore_query_get_max_variables(query));
 		svars	= 1 + av_len(names);
 		for (int j = 0; j < svars; j++) {
 			svp	= av_fetch(names, j, 0);
@@ -476,7 +476,7 @@ query__add_sort (query_t* query, triplestore_t* t, AV* names, int unique)
 		char* ptr;
 	CODE:
 		svars	= 1 + av_len(names);
-		sort_t* sort	= triplestore_new_sort(t, query->variables, svars, unique);
+		sort_t* sort	= triplestore_new_sort(t, triplestore_query_get_max_variables(query), svars, unique);
 		for (int j = 0; j < svars; j++) {
 			svp	= av_fetch(names, j, 0);
 			ptr = SvPV_nolen(*svp);
