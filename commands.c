@@ -170,13 +170,17 @@ int _triplestore_run_query(triplestore_t* t, query_t* query, struct command_ctx_
 		triplestore_print_query(t, query, stderr);
 	}
 
-	ctx->preamble_block(query);
+	if (ctx->preamble_block) {
+		ctx->preamble_block(query);
+	}
 	
 	double start	= triplestore_current_time();
 	__block int count	= 0;
 	triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
 		count++;
-		ctx->result_block(query, final_match);
+		if (ctx->result_block) {
+			ctx->result_block(query, final_match);
+		}
 		return 0;
 	});
 	if (ctx->verbose) {
