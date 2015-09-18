@@ -16,7 +16,8 @@ typedef enum {
 	TERM_BLANK					= 2,
 	TERM_XSDSTRING_LITERAL		= 3,
 	TERM_LANG_LITERAL			= 4,
-	TERM_TYPED_LITERAL			= 5
+	TERM_TYPED_LITERAL			= 5,
+	TERM_VARIABLE				= 99,
 } rdf_term_type_t;
 
 typedef enum {
