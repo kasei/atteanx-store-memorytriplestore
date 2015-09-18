@@ -285,6 +285,7 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 #pragma mark -
 
 static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_t* type, char** value, char** datatype, char** language) {
+	// TODO: unescape newlines in *value
 	if (ts[0] == '<') {
 		char* p	= strstr(ts, ">");
 		if (!p) {
@@ -756,6 +757,11 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 					free(datatype);
 				}
 			}
+		}
+		
+		if (!filter) {
+			ctx->set_error(-1, "Failed to construct FILTER");
+			return 1;
 		}
 		
 		if (ctx->constructing) {
