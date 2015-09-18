@@ -430,13 +430,13 @@ query__add_filter (query_t* query, triplestore_t* t, char* var_name, char* op, c
 		} else if (!strcmp(op, "isnumeric")) {
 			filter	= triplestore_new_filter(FILTER_ISNUMERIC, var);
 		} else if (!strcmp(op, "starts")) {
-			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat, type, lang);
+			filter	= triplestore_new_filter(FILTER_STRSTARTS, var, pat, strlen(pat), type, lang, strlen(lang));
 		} else if (!strcmp(op, "ends")) {
-			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat, type, lang);
+			filter	= triplestore_new_filter(FILTER_STRENDS, var, pat, strlen(pat), type, lang, strlen(lang));
 		} else if (!strcmp(op, "contains")) {
-			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat, type, lang);
+			filter	= triplestore_new_filter(FILTER_CONTAINS, var, pat, strlen(pat), type, lang, strlen(lang));
 		} else if (!strncmp(op, "re", 2)) {
-			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, flags);
+			filter	= triplestore_new_filter(FILTER_REGEX, var, pat, strlen(pat), flags, strlen(flags));
 		} else {
 			RETVAL = 1;
 			return;
