@@ -89,18 +89,18 @@ rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id) {
 	return term;
 }
 
-rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
+rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, char* _value, size_t value_len, char* _vtype, size_t vtype_len, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
-	char* v				= malloc(sizeof(rdf_term_t) + strlen(value) + 1);
+	char* v				= calloc(1, sizeof(rdf_term_t) + value_len + 1);
 	rdf_term_t* term	= (rdf_term_t*) v;
 	term->value			= v + sizeof(rdf_term_t);
 	term->type			= type;
 	term->is_numeric	= 0;
-	strcpy(term->value, value);
+	strncpy(term->value, _value, value_len);
 	
-	if (vtype) {
-		if (strlen(vtype) >= 8) {
-			fprintf(stderr, "*** Language tag is too long: %s\n", vtype);
+	if (_vtype) {
+		if (vtype_len >= 8) {
+			fprintf(stderr, "*** Language tag is too long: %s\n", _vtype);
 			return NULL;
 		}
 		
@@ -109,8 +109,8 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 		int rc = pcre_exec(
 						   t->lang_re,					/* the compiled pattern */
 						   NULL,						/* no extra data - we didn't study the pattern */
-						   vtype,						/* the subject string */
-						   (int) strlen(vtype),			/* the length of the subject */
+						   _vtype,						/* the subject string */
+						   (int) vtype_len,				/* the length of the subject */
 						   0,							/* start at offset 0 in the subject */
 						   0,							/* default options */
 						   ovector,						/* output vector for substring information */
@@ -118,7 +118,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 						   );
 		
 		if (rc <= 0) {
-			fprintf(stderr, "*** Language tag is not a valid lexical form: '%s'\n", vtype);
+			fprintf(stderr, "*** Language tag is not a valid lexical form: '%s'\n", _vtype);
 			free(v);
 			return NULL;
 		}
@@ -126,9 +126,9 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 		term->vtype.value_type	= 0;
 
 		// Normalize the case of the language and any region/script
-		const char* lang	= _parse_results(rc, 1, vtype, ovector, NULL);
-		const char* region	= _parse_results(rc, 2, vtype, ovector, NULL);
-		const char* script	= _parse_results(rc, 3, vtype, ovector, NULL);
+		const char* lang	= _parse_results(rc, 1, _vtype, ovector, NULL);
+		const char* region	= _parse_results(rc, 2, _vtype, ovector, NULL);
+		const char* script	= _parse_results(rc, 3, _vtype, ovector, NULL);
 		char* ptr	= (char*) &(term->vtype.value_type);
 		
 		// language is all lowercase
@@ -230,6 +230,15 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 	}
 	
 	return term;
+}
+
+rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid) {
+	size_t value_len	= strlen(value);
+	size_t vtype_len	= 0;
+	if (vtype) {
+		vtype_len	= strlen(vtype);
+	}
+	return triplestore_new_term_n(t, type, value, value_len, vtype, vtype_len, vid);
 }
 
 void free_rdf_term(rdf_term_t* t) {
@@ -791,12 +800,14 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 	} else if (type == FILTER_REGEX) {
 		int64_t id		= va_arg(ap, int64_t);
 		const char* pat = va_arg(ap, char*);
+		size_t pat_len	= va_arg(ap, size_t);
 		const char* fl	= va_arg(ap, char*);
+		size_t fl_len	= va_arg(ap, size_t);
 		filter->node1	= id;
-		filter->string2 = calloc(1, 1+strlen(pat));
-		filter->string3 = calloc(1, 1+strlen(fl));
-		strcpy(filter->string2, pat);
-		strcpy(filter->string3, fl);
+		filter->string2 = calloc(1, 1+pat_len);
+		filter->string3 = calloc(1, 1+fl_len);
+		strncpy(filter->string2, pat, pat_len);
+		strncpy(filter->string3, fl, fl_len);
 
 		filter->string2_type	= TERM_XSDSTRING_LITERAL;
 		filter->string2_lang	= NULL;
@@ -804,7 +815,7 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		const char *error;
 		int erroffset;
 		int flags		= 0;
-		if (strstr(fl, "i")) {
+		if (strstr(filter->string3, "i")) {
 			flags		|= PCRE_CASELESS;
 		}
 		filter->re = pcre_compile(
@@ -827,14 +838,16 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 	} else if (type == FILTER_STRSTARTS || type == FILTER_STRENDS || type == FILTER_CONTAINS) {
 		filter->node1			= va_arg(ap, int64_t);
 		const char* pat			= va_arg(ap, char*);
+		size_t pat_len			= va_arg(ap, size_t);
 		rdf_term_type_t type	= va_arg(ap, rdf_term_type_t);
-		filter->string2			= calloc(1, 1+strlen(pat));
-		strcpy(filter->string2, pat);
+		filter->string2			= calloc(1, 1+pat_len);
+		strncpy(filter->string2, pat, pat_len);
 		filter->string2_type	= type;
 		if (type == TERM_LANG_LITERAL) {
 			const char* lang		= va_arg(ap, char*);
-			filter->string2_lang	= calloc(1, 1+strlen(lang));
-			strcpy(filter->string2_lang, lang);
+			size_t lang_len			= va_arg(ap, size_t);
+			filter->string2_lang	= calloc(1, 1+lang_len);
+			strncpy(filter->string2_lang, lang, lang_len);
 		} else {
 			filter->string2_lang	= NULL;
 		}

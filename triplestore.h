@@ -162,6 +162,7 @@ double triplestore_current_time ( void );
 double triplestore_elapsed_time ( double start );
 
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid);
+rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, char* value, size_t value_len, char* vtype, size_t vtype_len, nodeid_t vid);
 rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id);
 void free_rdf_term(rdf_term_t* t);
 int triplestore_size(triplestore_t* t);

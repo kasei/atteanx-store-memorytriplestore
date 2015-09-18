@@ -284,7 +284,8 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 
 #pragma mark -
 
-static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_t* type, char** value, char** datatype, char** language) {
+// TODO: change this so that it doesn't allocate any memory. return pointers into input string *and* lengths for: value, datatype, language
+static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_t* type, char** value, char** datatype, char** language, size_t* language_len) {
 	// TODO: unescape newlines in *value
 	if (ts[0] == '<') {
 		char* p	= strstr(ts, ">");
@@ -335,6 +336,7 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_
 			*type		= TERM_LANG_LITERAL;
 			*language	= calloc(1, 1 + len);
 			snprintf(*language, 1+len, "%s", p);
+			*language_len	= strlen(*language);
 			*datatype	= NULL;
 			return 0;
 		} else {
@@ -361,13 +363,12 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_
 }
 
 int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* query, const char* ts) {
-	char* value;
-	char * datatype;
-	char* language;
+	char *value, *datatype, *language;
+	size_t language_len;
 	rdf_term_type_t type;
 
 // 	fprintf(stderr, ">>> Term: %s\n", ts);
-	if (_parse_term(ctx, ts, &type, &value, &datatype, &language)) {
+	if (_parse_term(ctx, ts, &type, &value, &datatype, &language, &language_len)) {
 		return 0;
 	}
 	
@@ -412,22 +413,27 @@ int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* quer
 	return id;
 }
 
-int64_t triplestore_query_get_variable_id(query_t* query, const char* var) {
+static int64_t triplestore_query_get_variable_id_n(query_t* query, const char* var, size_t len) {
 	int64_t v	= 0;
 	char* p		= (char*) var;
 	if (p[0] == '?') {
 		p++;
+		len--;
 	}
 	for (int x = 1; x <= triplestore_query_get_max_variables(query); x++) {
 		const char* vname	= query->variable_names[x];
 		if (vname) {
-			if (!strcmp(p, vname)) {
+			if (strlen(vname) == len && !strncmp(p, vname, len)) {
 				v	= -x;
 				break;
 			}
 		}
 	}
 	return v;
+}
+
+int64_t triplestore_query_get_variable_id(query_t* query, const char* var) {
+	return triplestore_query_get_variable_id_n(query, var, strlen(var));
 }
 
 int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char** argv) {
@@ -711,7 +717,8 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 
 			rdf_term_type_t type;
 			char *value, *language, *datatype;
-			if (_parse_term(ctx, ts, &type, &value, &datatype, &language)) {
+			size_t language_len;
+			if (_parse_term(ctx, ts, &type, &value, &datatype, &language, &language_len)) {
 				ctx->set_error(-1, "Failed to parse FILTER value");
 				return 1;
 			}
@@ -728,7 +735,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 // 			fprintf(stderr, "--------\n");
 			
 			if (!strncmp(op, "re", 2)) {
-				filter	= triplestore_new_filter(FILTER_REGEX, var, value, "i");
+				filter	= triplestore_new_filter(FILTER_REGEX, var, value, strlen(value), "i", 1);
 			} else {
 				filter_type_t ftype;
 				if (!strcmp(op, "starts")) {
@@ -743,11 +750,11 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 				}
 				
 				if (language) {
-					filter	= triplestore_new_filter(ftype, var, value, TERM_LANG_LITERAL, language);
+					filter	= triplestore_new_filter(ftype, var, value, strlen(value), TERM_LANG_LITERAL, language, strlen(language));
 				} else if (datatype) {
-					filter	= triplestore_new_filter(ftype, var, value, TERM_TYPED_LITERAL, datatype);
+					filter	= triplestore_new_filter(ftype, var, value, strlen(value), TERM_TYPED_LITERAL, datatype, strlen(datatype));
 				} else {
-					filter	= triplestore_new_filter(ftype, var, value, TERM_XSDSTRING_LITERAL);
+					filter	= triplestore_new_filter(ftype, var, value, strlen(value), TERM_XSDSTRING_LITERAL);
 				}
 				free(value);
 				if (language) {
