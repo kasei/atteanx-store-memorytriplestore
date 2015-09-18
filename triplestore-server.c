@@ -42,85 +42,6 @@ static int triplestore_output_op(triplestore_t* t, struct command_ctx_s* ctx, in
 	}
 }
 
-static int64_t _triplestore_query_get_variable_id(query_t* query, const char* var) {
-	int64_t v	= 0;
-	char* p		= (char*) var;
-	if (p[0] == '?') {
-		p++;
-	}
-	for (int x = 1; x <= triplestore_query_get_max_variables(query); x++) {
-		const char* vname	= query->variable_names[x];
-		if (vname) {
-			if (!strcmp(p, vname)) {
-				v	= -x;
-				break;
-			}
-		}
-	}
-	return v;
-}
-
-static query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int argc, char** argv, int i) {
-	int count		= argc - i - 1;
-	if (count % 3) {
-		return NULL;
-	}
-	int triples		= count / 3;
-	int variables	= 3 * triples;
-//	int next_var	= 1;
-	query_t* query	= triplestore_new_query(t, 0);
-	bgp_t* bgp		= triplestore_new_bgp(t, variables, triples);
-	int j			= 0;
-	int64_t* ids	= calloc(sizeof(int64_t), variables);
-	while (i+1 < argc) {
-		int index			= j++;
-		const char* ts		= argv[++i];
-		int64_t id			= query_node_id(t, ctx, query, ts);
-		if (!id) {
-			ctx->set_error(-1, "No node ID found for BGP term");
-//			fprintf(stderr, "No node ID found for BGP term %s\n", ts);
-			triplestore_free_query(query);
-			triplestore_free_bgp(bgp);
-			free(ids);
-			return NULL;
-		}
-		ids[index]	= id;
-	}
-	
-	int possible_variables	= triplestore_query_get_max_variables(query) + 3*triples;
-	int* seen				= calloc(possible_variables, sizeof(int));
-	for (j = 0; j < triples; j++) {
-		int64_t s	= ids[3*j + 0];
-		int64_t p	= ids[3*j + 1];
-		int64_t o	= ids[3*j + 2];
-		if (j > 0) {
-			int joinable	= 0;
-			if (s < 0 && seen[-s]) { joinable++; }
-			if (p < 0 && seen[-p]) { joinable++; }
-			if (o < 0 && seen[-o]) { joinable++; }
-			if (joinable == 0) {
-				free(ids);
-				free(seen);
-				triplestore_free_query(query);
-				triplestore_free_bgp(bgp);
-				ctx->set_error(-1, "BGP with cartesian products are not allowed");
-//				server_ctx_set_error(ctx, "BGP with cartesian products are not allowed");
-				return NULL;
-			}
-		}
-		if (s < 0) { seen[-s]++; }
-		if (p < 0) { seen[-p]++; }
-		if (o < 0) { seen[-o]++; }
-		triplestore_bgp_set_triple_nodes(bgp, j, s, p, o);
-	}
-	free(ids);
-	free(seen);
-
-	triplestore_query_add_op(query, QUERY_BGP, bgp);
-	
-	return query;
-}
-
 #pragma mark -
 
 triplestore_server_t* triplestore_new_server(short port, int use_http, triplestore_t* t) {
@@ -461,6 +382,9 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 				fwrite_tsv(datatype, 1, strlen(datatype), f);
 				fwrite(">", 1, 1, f);
 			}
+			return 0;
+		case TERM_VARIABLE:
+			fprintf(f, "?%s", term->value);
 			return 0;
 	}
 }
