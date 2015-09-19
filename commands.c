@@ -284,8 +284,7 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 
 #pragma mark -
 
-// TODO: change this so that it doesn't allocate any memory. return pointers into input string *and* lengths for: value, datatype, language
-static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_t* type, char** value, char** datatype, char** language, size_t* language_len) {
+static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rdf_term_type_t* type, const char** value, size_t* value_len, int* needs_free, const char** datatype, size_t* datatype_len, const char** language, size_t* language_len) {
 	// TODO: unescape newlines in *value
 	if (ts[0] == '<') {
 		char* p	= strstr(ts, ">");
@@ -293,13 +292,17 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_
 			fprintf(stderr, "cannot parse IRI value\n");
 			return 1;
 		}
-		long len	= p - ts;
+		long len		= p - ts;
 
-		*type		= TERM_IRI;
-		*value		= calloc(1, 1 + len);
-		snprintf(*value, 1+len, "%s", ts+1);
-		*language	= NULL;
-		*datatype	= NULL;
+		*type			= TERM_IRI;
+		*needs_free		= 0;
+		*value			= ts+1;
+		*value_len		= len-1;
+		
+		*language		= NULL;
+		*language_len	= 0;
+		*datatype		= NULL;
+		*datatype_len	= 0;
 		return 0;
 	} else if (ts[0] == '"') {
 		char* p	= strstr(ts+1, "\"");
@@ -309,42 +312,89 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_
 		}
 		long len	= p - ts - 1;
 
-		*value		= calloc(1, 1 + len);
-		snprintf(*value, 1+len, "%s", ts+1);
+		*value		= ts+1;
+		*value_len	= len;
+		
 		if (p[1] == '^') {
 			p++;
 			if (strncmp(p, "^^<", 3)) {
-				free(*value);
 				fprintf(stderr, "cannot parse typed literal value\n");
 				return 1;
 			}
 			p += 3;
 			char* q	= strstr(p, ">");
 			if (!q) {
-				free(*value);
 				fprintf(stderr, "cannot parse typed literal value\n");
 				return 1;
 			}
-			int len	= q - p + 1;
-			*type		= TERM_TYPED_LITERAL;
-			*language	= NULL;
-			*datatype	= calloc(1, 1 + len);
-			snprintf(*datatype, 1+len, "%s", p);
-			return 0;
+			int len			= q - p + 1;
+			*type			= TERM_TYPED_LITERAL;
+			*language		= NULL;
+			*language_len	= 0;
+			*datatype		= p;
+			*datatype_len	= len;
 		} else if (p[1] == '@') {
 			p += 2;
-			*type		= TERM_LANG_LITERAL;
-			*language	= calloc(1, 1 + len);
-			snprintf(*language, 1+len, "%s", p);
-			*language_len	= strlen(*language);
-			*datatype	= NULL;
-			return 0;
+			*type			= TERM_LANG_LITERAL;
+			*language		= p;
+			*language_len	= strlen(p);
+			*datatype		= NULL;
+			*datatype_len	= 0;
 		} else {
-			*type		= TERM_XSDSTRING_LITERAL;
-			*language	= NULL;
-			*datatype	= NULL;
-			return 0;
+			*type			= TERM_XSDSTRING_LITERAL;
+			*language		= NULL;
+			*language_len	= 0;
+			*datatype		= NULL;
+			*datatype_len	= 0;
 		}
+
+		fprintf(stderr, "Parsed literal value (%d bytes):\n", *value_len);
+		fwrite(*value, 1, *value_len, stderr);
+		fprintf(stderr, "---\n");
+
+		*needs_free		= 0;
+		if (escape) {
+			for (int i = 1; i < *value_len; i++) {
+				if ((*value)[i-1] == '\\' && (*value)[i] == 'n') {
+					*needs_free	= 1;
+					break;
+				}
+			}
+		
+			if (*needs_free) {
+				// the value string has escaped newlines.
+				// copy it to a new buffer and unescape
+				size_t new_len		= 0;
+				const char* orig	= *value;
+				char* new	= calloc(1, 1+*value_len);
+				char* p		= new;
+				for (int i = 0; i < *value_len; i++) {
+					if (orig[i] == '\\') {
+						if (i == (*value_len-1)) {
+							free(new);
+							fprintf(stderr, "Can't find string terminator");
+							return 1;
+						}
+						i++;
+						if (orig[i] == 'n') {
+							*(p++)	= '\n';
+							new_len++;
+						} else {
+							free(new);
+							fprintf(stderr, "Bad string escape");
+							return 1;
+						}
+					} else {
+						new_len++;
+						*(p++)	= orig[i];
+					}
+				}
+				*value		= new;
+				*value_len	= new_len;
+			}
+		}
+		
+		return 0;
 	} else {
 		char* p		= (char*) ts;
 		if (p[0] == '?') {
@@ -353,55 +403,56 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, rdf_term_type_
 		
 		long len	= strlen(p);
 		
-		*type		= TERM_VARIABLE;
-		*value		= calloc(1, 1+len);
-		snprintf(*value, 1+len, "%s", p);
-		*language	= NULL;
-		*datatype	= NULL;
+		*type			= TERM_VARIABLE;
+		*needs_free		= 0;
+		*value			= p;
+		*value_len		= len;
+		*language		= NULL;
+		*language_len	= 0;
+		*datatype		= NULL;
+		*datatype_len	= 0;
 		return 0;
 	}
 }
 
 int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* query, const char* ts) {
-	char *value, *datatype, *language;
-	size_t language_len;
+	const char *value, *datatype, *language;
+	size_t value_len, language_len, datatype_len;
 	rdf_term_type_t type;
+	int value_needs_free;
 
 // 	fprintf(stderr, ">>> Term: %s\n", ts);
-	if (_parse_term(ctx, ts, &type, &value, &datatype, &language, &language_len)) {
+	static const int escape	= 1;
+	if (_parse_term(ctx, ts, escape, &type, &value, &value_len, &value_needs_free, &datatype, &datatype_len, &language, &language_len)) {
 		return 0;
 	}
 	
 	int64_t id	= 0;
 	if (type == TERM_IRI) {
-		rdf_term_t* term = triplestore_new_term(t, TERM_IRI, value, NULL, 0);
+		rdf_term_t* term = triplestore_new_term_n(t, TERM_IRI, value, value_len, NULL, 0, 0);
 		id = triplestore_get_termid(t, term);
-		free(value);
 	} else if (type == TERM_TYPED_LITERAL) {
-		rdf_term_t* dtterm = triplestore_new_term(t, TERM_IRI, datatype, NULL, 0);
+		rdf_term_t* dtterm = triplestore_new_term_n(t, TERM_IRI, datatype, datatype_len, NULL, 0, 0);
 		int64_t dtid = triplestore_get_termid(t, dtterm);
-		rdf_term_t* term = triplestore_new_term(t, TERM_TYPED_LITERAL, value, NULL, (nodeid_t) dtid);
+		rdf_term_t* term = triplestore_new_term_n(t, TERM_TYPED_LITERAL, value, value_len, NULL, 0, (nodeid_t) dtid);
 		id = triplestore_get_termid(t, term);
-		free(value);
-		free(datatype);
 		free_rdf_term(dtterm);
 	} else if (type == TERM_LANG_LITERAL) {
-		rdf_term_t* term = triplestore_new_term(t, TERM_LANG_LITERAL, value, language, 0);
+		rdf_term_t* term = triplestore_new_term_n(t, TERM_LANG_LITERAL, value, value_len, language, language_len, 0);
 		id = triplestore_get_termid(t, term);
-		free(value);
-		free(language);
 	} else if (type == TERM_XSDSTRING_LITERAL) {
-		rdf_term_t* term = triplestore_new_term(t, TERM_XSDSTRING_LITERAL, value, NULL, 0);
+		rdf_term_t* term = triplestore_new_term_n(t, TERM_XSDSTRING_LITERAL, value, value_len, NULL, 0, 0);
 		id = triplestore_get_termid(t, term);
-		free(value);
 	} else if (type == TERM_VARIABLE) {
-		id	= triplestore_query_get_variable_id(query, value);
+		id	= triplestore_query_get_variable_id_n(query, value, value_len);
 		if (id == 0) {
-			id	= triplestore_query_add_variable(query, value);
+			id	= triplestore_query_add_variable_n(query, value, value_len);
 		}
-		free(value);
 	} else {
 		fprintf(stderr, "*** Unrecognized term string: %s\n", ts);
+		if (value_needs_free) {
+			free((char*) value);
+		}
 		return 0;
 	}
 	
@@ -410,10 +461,13 @@ int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* quer
 		fprintf(stderr, "Unrecognized term string %s\n", ts);
 	}
 	
+	if (value_needs_free) {
+		free((char*) value);
+	}
 	return id;
 }
 
-static int64_t triplestore_query_get_variable_id_n(query_t* query, const char* var, size_t len) {
+int64_t triplestore_query_get_variable_id_n(query_t* query, const char* var, size_t len) {
 	int64_t v	= 0;
 	char* p		= (char*) var;
 	if (p[0] == '?') {
@@ -716,23 +770,34 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			const char* ts	= argv[++i];
 
 			rdf_term_type_t type;
-			char *value, *language, *datatype;
-			size_t language_len;
-			if (_parse_term(ctx, ts, &type, &value, &datatype, &language, &language_len)) {
+			const char *value, *language, *datatype;
+			size_t value_len, language_len, datatype_len;
+			int value_needs_free;
+
+			int escape	= 1;
+			if (!strncmp(op, "re", 2)) {
+				escape	= 0;
+			}
+			if (_parse_term(ctx, ts, escape, &type, &value, &value_len, &value_needs_free, &datatype, &datatype_len, &language, &language_len)) {
 				ctx->set_error(-1, "Failed to parse FILTER value");
 				return 1;
 			}
 			
 			if (type < TERM_XSDSTRING_LITERAL || type > TERM_TYPED_LITERAL) {
 				ctx->set_error(-1, "Non-literal value passed to FILTER");
+				if (value_needs_free) {
+					free((char*) value);
+				}
 				return 1;
 			}
-// 			fprintf(stderr, "--------\n");
-// 			fprintf(stderr, "Term type: %d\n", type);
-// 			fprintf(stderr, "Term value: %s\n", value);
-// 			fprintf(stderr, "Term language: %s\n", language);
-// 			fprintf(stderr, "Term datatype: %s\n", datatype);
-// 			fprintf(stderr, "--------\n");
+			fprintf(stderr, "--------\n");
+			fprintf(stderr, "Term type: %d\n", type);
+			fprintf(stderr, "Term value: ");
+			fwrite(value, 1, value_len, stderr);
+			fprintf(stderr, "\n");
+			fprintf(stderr, "Term language: %s\n", language);
+			fprintf(stderr, "Term datatype: %s\n", datatype);
+			fprintf(stderr, "--------\n");
 			
 			if (!strncmp(op, "re", 2)) {
 				filter	= triplestore_new_filter(FILTER_REGEX, var, value, strlen(value), "i", 1);
@@ -744,24 +809,23 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 					ftype	= FILTER_STRENDS;
 				} else if (!strcmp(op, "contains")) {
 					ftype	= FILTER_CONTAINS;
+					fprintf(stderr, "*** contains (%d) <<<", value_needs_free);
+					fwrite(value, 1, value_len, stderr);
+					fprintf(stderr, ">>>\n");
 				} else {
 					ctx->set_error(-1, "Unrecognized FILTER operation");
+					if (value_needs_free) {
+						free((char*) value);
+					}
 					return 1;
 				}
 				
 				if (language) {
-					filter	= triplestore_new_filter(ftype, var, value, strlen(value), TERM_LANG_LITERAL, language, strlen(language));
+					filter	= triplestore_new_filter(ftype, var, value, value_len, TERM_LANG_LITERAL, language, strlen(language));
 				} else if (datatype) {
-					filter	= triplestore_new_filter(ftype, var, value, strlen(value), TERM_TYPED_LITERAL, datatype, strlen(datatype));
+					filter	= triplestore_new_filter(ftype, var, value, value_len, TERM_TYPED_LITERAL, datatype, strlen(datatype));
 				} else {
-					filter	= triplestore_new_filter(ftype, var, value, strlen(value), TERM_XSDSTRING_LITERAL);
-				}
-				free(value);
-				if (language) {
-					free(language);
-				}
-				if (datatype) {
-					free(datatype);
+					filter	= triplestore_new_filter(ftype, var, value, value_len, TERM_XSDSTRING_LITERAL);
 				}
 			}
 		}
