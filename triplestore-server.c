@@ -310,7 +310,6 @@ int triplestore_run_server(triplestore_server_t* s) {
 }
 
 static size_t fwrite_tsv(const char* ptr, size_t size, size_t nitems, FILE *restrict stream) {
-	// TODO: escape values
 	int needs_escape	= 0;
 	int bytes	= size * nitems;
 	for (int i = 0; i < size * bytes; i++) {
@@ -321,7 +320,7 @@ static size_t fwrite_tsv(const char* ptr, size_t size, size_t nitems, FILE *rest
 	
 	if (needs_escape) {
 		size_t bytes	= 0;
-		for (int i = 0; i < size * bytes; i++) {
+		for (int i = 0; i < size * nitems; i++) {
 			if (ptr[i] == '\r') {
 				bytes	+= fwrite("\\r", 1, 2, stream);
 			} else if (ptr[i] == '\n') {
@@ -362,7 +361,6 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 			fwrite("\"", 1, 1, f);
 			return 0;
 		case TERM_LANG_LITERAL:
-			// TODO: handle escaping
 			fwrite("\"", 1, 1, f);
 			fwrite_tsv(term->value, 1, strlen(term->value), f);
 			fprintf(f, "\"@%s", (char*) &(term->vtype.value_type));
