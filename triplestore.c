@@ -378,6 +378,7 @@ static pcre* _new_regex(const char* name, const char* pattern) {
 
 triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	triplestore_t* t	= (triplestore_t*) calloc(sizeof(triplestore_t), 1);
+	t->read_only		= 0;
 	t->edges_alloc		= max_edges;
 	t->nodes_alloc		= max_nodes;
 	t->edges_used		= 0;
@@ -422,6 +423,14 @@ int free_triplestore(triplestore_t* t) {
 	free(t->graph);
 	free(t);
 	return 0;
+}
+
+int triplestore_set_read_only(triplestore_t* t) {
+	t->read_only	= 1;
+}
+
+int triplestore_read_only(triplestore_t* t) {
+	return t->read_only;
 }
 
 int triplestore_expand_edges(triplestore_t* t) {
@@ -565,6 +574,11 @@ int triplestore_dump(triplestore_t* t, const char* filename) {
 }
 
 int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
+	if (triplestore_read_only(t)) {
+		fprintf(stderr, "Cannot load into a read-only triplestore\n");
+		return 1;
+	}
+	
 	double start	= triplestore_current_time();
 	
 	int fd	= open(filename, O_RDONLY);

@@ -135,6 +135,8 @@ typedef struct query_filter_s {
 } query_filter_t;
 
 typedef struct triplestore_s {
+	int read_only;
+	
 	int edges_alloc;
 	int edges_used;
 	
@@ -173,7 +175,8 @@ int free_triplestore(triplestore_t* t);
 int triplestore_add_triple(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o, uint64_t timestamp);
 nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm);
 nodeid_t triplestore_get_termid(triplestore_t* t, rdf_term_t* myterm);
-
+int triplestore_set_read_only(triplestore_t* t);
+int triplestore_read_only(triplestore_t* t);
 
 int triplestore_dump(triplestore_t* t, const char* filename);
 int triplestore_load(triplestore_t* t, const char* filename, int verbose);
