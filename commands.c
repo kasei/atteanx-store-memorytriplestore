@@ -348,9 +348,9 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rd
 			*datatype_len	= 0;
 		}
 
-		fprintf(stderr, "Parsed literal value (%d bytes):\n", *value_len);
-		fwrite(*value, 1, *value_len, stderr);
-		fprintf(stderr, "---\n");
+// 		fprintf(stderr, "Parsed literal value (%d bytes):\n", *value_len);
+// 		fwrite(*value, 1, *value_len, stderr);
+// 		fprintf(stderr, "---\n");
 
 		*needs_free		= 0;
 		if (escape) {
@@ -555,7 +555,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 	} else if (!strcmp(op, "size")) {
 		uint32_t count	= triplestore_size(t);
-		fprintf(f, "%"PRIu32" triples\n", count);
+		fprintf(stderr, "SIZE: %"PRIu32" triples\n", count);
 	} else if (!strcmp(op, "begin")) {
 		ctx->constructing	= 1;
 		ctx->query			= NULL;
@@ -809,9 +809,6 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 					ftype	= FILTER_STRENDS;
 				} else if (!strcmp(op, "contains")) {
 					ftype	= FILTER_CONTAINS;
-					fprintf(stderr, "*** contains (%d) <<<", value_needs_free);
-					fwrite(value, 1, value_len, stderr);
-					fprintf(stderr, ">>>\n");
 				} else {
 					ctx->set_error(-1, "Unrecognized FILTER operation");
 					if (value_needs_free) {

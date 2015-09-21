@@ -162,7 +162,7 @@ double triplestore_current_time ( void );
 double triplestore_elapsed_time ( double start );
 
 rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* value, char* vtype, nodeid_t vid);
-rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, char* value, size_t value_len, char* vtype, size_t vtype_len, nodeid_t vid);
+rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const char* value, size_t value_len, const char* vtype, size_t vtype_len, nodeid_t vid);
 rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id);
 void free_rdf_term(rdf_term_t* t);
 int triplestore_size(triplestore_t* t);
@@ -193,6 +193,7 @@ int triplestore_free_query(query_t* query);
 int triplestore_query_set_variable_name(query_t* query, int variable, const char* name);
 int triplestore_ensure_variable_capacity(query_t* query, int var);
 int64_t triplestore_query_add_variable(query_t* query, const char* name);
+int64_t triplestore_query_add_variable_n(query_t* query, const char* name, size_t name_len);
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match));
 int triplestore_query_get_max_variables(query_t* query);

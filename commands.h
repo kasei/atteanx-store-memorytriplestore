@@ -27,6 +27,7 @@ struct command_ctx_s {
 
 void help(FILE* f);
 int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* query, const char* ts);
+int64_t triplestore_query_get_variable_id_n(query_t* query, const char* var, size_t len);
 int64_t triplestore_query_get_variable_id(query_t* query, const char* var);
 int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char** argv);
 int triplestore_vop(triplestore_t* t, struct command_ctx_s* ctx, int argc, ...);

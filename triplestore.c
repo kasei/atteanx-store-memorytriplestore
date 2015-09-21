@@ -89,7 +89,7 @@ rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id) {
 	return term;
 }
 
-rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, char* _value, size_t value_len, char* _vtype, size_t vtype_len, nodeid_t vid) {
+rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const char* _value, size_t value_len, const char* _vtype, size_t vtype_len, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
 	char* v				= calloc(1, sizeof(rdf_term_t) + value_len + 1);
 	rdf_term_t* term	= (rdf_term_t*) v;
@@ -328,6 +328,10 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 				sprintf(string, "\"%s\"^^%s", t->value, extra);
 			}
 			free(extra);
+			break;
+		case TERM_VARIABLE:
+			string	= calloc(1, 1+strlen(t->value)+1);
+			sprintf(string, "?%s", t->value);
 			break;
 	}
 	return string;
@@ -1282,6 +1286,7 @@ int triplestore_query_get_max_variables(query_t* query) {
 
 int triplestore_query_set_max_variables(query_t* query, int max) {
 	query->max_variables	= max;
+	return 0;
 }
 
 query_t* triplestore_new_query(triplestore_t* t, int variables) {
@@ -1337,7 +1342,7 @@ int triplestore_free_query(query_t* query) {
 	return 0;
 }
 
-int triplestore_query_set_variable_name(query_t* query, int variable, const char* name) {
+int triplestore_query_set_variable_name_n(query_t* query, int variable, const char* name, size_t name_len) {
 	if (triplestore_ensure_variable_capacity(query, variable) < 0) {
 		return 1;
 	}
@@ -1347,14 +1352,18 @@ int triplestore_query_set_variable_name(query_t* query, int variable, const char
 		free(query->variable_names[variable]);
 		query->variable_names[variable] = NULL;
 	}
-	query->variable_names[variable] = calloc(1, 1+strlen(name));
+	query->variable_names[variable] = calloc(1, 1+name_len);
 	if (!query->variable_names[variable]) {
 		return 1;
 	}
 	
-	strcpy(query->variable_names[variable], name);
+	strncpy(query->variable_names[variable], name, name_len);
 // 	fprintf(stderr, "set variable ?%s\n", query->variable_names[variable]);
 	return 0;
+}
+
+int triplestore_query_set_variable_name(query_t* query, int variable, const char* name) {
+	return triplestore_query_set_variable_name_n(query, variable, name, strlen(name));
 }
 
 int triplestore_ensure_variable_capacity(query_t* query, int var) {
@@ -1375,15 +1384,19 @@ int triplestore_ensure_variable_capacity(query_t* query, int var) {
 	return 0;
 }
 
-int64_t triplestore_query_add_variable(query_t* query, const char* name) {
+int64_t triplestore_query_add_variable_n(query_t* query, const char* name, size_t name_len) {
 	int64_t var = 1 + triplestore_query_get_max_variables(query);
 	if (triplestore_ensure_variable_capacity(query, (int) var) < 0) {
 		return 0;
 	}
-	if (triplestore_query_set_variable_name(query, (int) var, name)) {
+	if (triplestore_query_set_variable_name_n(query, (int) var, name, name_len)) {
 		return 0;
 	}
 	return -var;
+}
+
+int64_t triplestore_query_add_variable(query_t* query, const char* name) {
+	return triplestore_query_add_variable_n(query, name, strlen(name));
 }
 
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
@@ -1727,11 +1740,11 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 			} else if (_p == _o) {
 				repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (p == o); };
 			} else if (_s == _o) {
-				fprintf(stderr, "Need to verify subject == object\n");
+// 				fprintf(stderr, "Need to verify subject == object\n");
 				repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (s == o); };
 			}
 		} else if (_s < 0 && _s == _o) {
-			fprintf(stderr, "Need to verify subject == object\n");
+// 			fprintf(stderr, "Need to verify subject == object\n");
 			repeated_vars_ok	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return (o == s); };
 		}
 		for (nodeid_t s = 1; s <= t->nodes_used; s++) {
@@ -1761,61 +1774,65 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 #pragma mark -
 #pragma mark Print Functions
 
-int triplestore_write_term(triplestore_t* t, nodeid_t s, int fd) {
-	if (s > t->nodes_used) {
-		return 1;
-	}
-	rdf_term_t* dt			= NULL;
-	rdf_term_t* term		= t->graph[s]._term;
-	if (term == NULL) {
-		return 1;
-	}
-	
-	char* buffer	= alloca(64);
-	switch (term->type) {
-		case TERM_IRI:
-			write(fd, "<", 1);
-			write(fd, term->value, strlen(term->value));
-			write(fd, ">", 1);
-			break;
-		case TERM_BLANK:
-			write(fd, "_:", 2);
-			write(fd, term->value, strlen(term->value));
-			snprintf(buffer, 32, "%"PRIu32"b%s", (uint32_t) term->vtype.value_id, term->value);
-			write(fd, buffer, strlen(buffer));
-			break;
-		case TERM_XSDSTRING_LITERAL:
-			// TODO: handle escaping
-			write(fd, "\"", 1);
-			write(fd, term->value, strlen(term->value));
-			write(fd, "\"", 1);
-			break;
-		case TERM_LANG_LITERAL:
-			// TODO: handle escaping
-			write(fd, "\"", 1);
-			write(fd, term->value, strlen(term->value));
-			write(fd, "\"@", 2);
-			write(fd, (char*) &(term->vtype.value_type), strlen((char*) &(term->vtype.value_type)));
-			break;
-		case TERM_TYPED_LITERAL:
-			// TODO: handle escaping
-			dt		= t->graph[ term->vtype.value_id ]._term;
-			if (strcmp(dt->value, "http://www.w3.org/2001/XMLSchema#string")) {
-				write(fd, "\"", 1);
-				write(fd, term->value, strlen(term->value));
-				write(fd, "\"^^<", 4);
-				write(fd, dt->value, strlen(dt->value));
-				write(fd, ">", 1);
-			} else {
-				write(fd, "\"", 1);
-				write(fd, term->value, strlen(term->value));
-				write(fd, "\"", 1);
-			}
-			break;
-	}
-
-	return 0;
-}
+// int triplestore_write_term(triplestore_t* t, nodeid_t s, int fd) {
+// 	if (s > t->nodes_used) {
+// 		return 1;
+// 	}
+// 	rdf_term_t* dt			= NULL;
+// 	rdf_term_t* term		= t->graph[s]._term;
+// 	if (term == NULL) {
+// 		return 1;
+// 	}
+// 	
+// 	char* buffer	= alloca(64);
+// 	switch (term->type) {
+// 		case TERM_IRI:
+// 			write(fd, "<", 1);
+// 			write(fd, term->value, strlen(term->value));
+// 			write(fd, ">", 1);
+// 			break;
+// 		case TERM_BLANK:
+// 			write(fd, "_:", 2);
+// 			write(fd, term->value, strlen(term->value));
+// 			snprintf(buffer, 32, "%"PRIu32"b%s", (uint32_t) term->vtype.value_id, term->value);
+// 			write(fd, buffer, strlen(buffer));
+// 			break;
+// 		case TERM_XSDSTRING_LITERAL:
+// 			// TODO: handle escaping
+// 			write(fd, "\"", 1);
+// 			write(fd, term->value, strlen(term->value));
+// 			write(fd, "\"", 1);
+// 			break;
+// 		case TERM_LANG_LITERAL:
+// 			// TODO: handle escaping
+// 			write(fd, "\"", 1);
+// 			write(fd, term->value, strlen(term->value));
+// 			write(fd, "\"@", 2);
+// 			write(fd, (char*) &(term->vtype.value_type), strlen((char*) &(term->vtype.value_type)));
+// 			break;
+// 		case TERM_TYPED_LITERAL:
+// 			// TODO: handle escaping
+// 			dt		= t->graph[ term->vtype.value_id ]._term;
+// 			if (strcmp(dt->value, "http://www.w3.org/2001/XMLSchema#string")) {
+// 				write(fd, "\"", 1);
+// 				write(fd, term->value, strlen(term->value));
+// 				write(fd, "\"^^<", 4);
+// 				write(fd, dt->value, strlen(dt->value));
+// 				write(fd, ">", 1);
+// 			} else {
+// 				write(fd, "\"", 1);
+// 				write(fd, term->value, strlen(term->value));
+// 				write(fd, "\"", 1);
+// 			}
+// 			break;
+// 		case TERM_VARIABLE:
+// 			write(fd, "?", 1);
+// 			write(fd, term->value, strlen(term->value));
+// 			break;
+// 	}
+// 
+// 	return 0;
+// }
 
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
 	if (s > t->nodes_used) {
@@ -1836,16 +1853,16 @@ int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline) {
 	return 0;
 }
 
-static void _write_term_or_variable(triplestore_t* t, int variables, char** variable_names, int64_t s, int fd) {
-	if (s == 0) {
-		write(fd, "[]", 2);
-	} else if (s < 0) {
-		write(fd, "?", 1);
-		write(fd, variable_names[-s], strlen(variable_names[-s]));
-	} else {
-		triplestore_write_term(t, (nodeid_t)s, fd);
-	}
-}
+// static void _write_term_or_variable(triplestore_t* t, int variables, char** variable_names, int64_t s, int fd) {
+// 	if (s == 0) {
+// 		write(fd, "[]", 2);
+// 	} else if (s < 0) {
+// 		write(fd, "?", 1);
+// 		write(fd, variable_names[-s], strlen(variable_names[-s]));
+// 	} else {
+// 		triplestore_write_term(t, (nodeid_t)s, fd);
+// 	}
+// }
 
 static void _print_term_or_variable(triplestore_t* t, int variables, char** variable_names, int64_t s, FILE* f) {
 	if (s == 0) {
