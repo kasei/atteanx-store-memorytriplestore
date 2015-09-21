@@ -58,6 +58,7 @@ triplestore_server_t* triplestore_new_server(short port, int use_http, triplesto
 	server->buffer		= calloc(sizeof(ck_ring_buffer_t), server->size);
 	ck_ring_init(server->ring, server->size);
 	server->threads		= calloc(sizeof(pthread_t), server->nthr);
+	triplestore_set_read_only(t);
 	
 	return server;
 }
@@ -406,6 +407,7 @@ int serialize_result(triplestore_server_t* s, struct command_ctx_s* ctx, FILE* f
 
 int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query, FILE* out) {
 	__block struct command_ctx_s ctx	= {
+		.sandbox			= 1,
 		.error				= 0,
 		.error_message		= NULL,
 		.start				= triplestore_current_time(),

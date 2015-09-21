@@ -11,6 +11,7 @@
 #include "triplestore.h"
 
 struct command_ctx_s {
+	int sandbox;
 	int verbose;
 	int print;
 	int error;

@@ -511,8 +511,16 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 	const char* op			= argv[i];
 	if (!strcmp(op, "") || op[0] == '#') {
 	} else if (!strcmp(op, "help")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "HELP not allowed");
+			return 1;
+		}
 		help(f);
 	} else if (!strcmp(op, "set")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "SET not allowed");
+			return 1;
+		}
 		if (argc < (i + 1 + 1)) {
 			ctx->set_error(-1, "Insufficient arguments passed to BGP");
 			return 1;
@@ -540,6 +548,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			strcpy(ctx->language, argv[++i]);
 		}
 	} else if (!strcmp(op, "unset")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "UNSET not allowed");
+			return 1;
+		}
 		if (argc < (i + 1 + 1)) {
 			ctx->set_error(-1, "Insufficient arguments passed to BGP");
 			return 1;
@@ -853,15 +865,26 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 	} else if (!strcmp(op, "ntriples")) {
 		triplestore_print_ntriples(t, stdout, ctx->limit);
 	} else if (!strcmp(op, "load")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "LOADing of data not allowed");
+			return 1;
+		}
 		const char* filename	= argv[++i];
 		double start	= triplestore_current_time();
-		triplestore_load(t, filename, ctx->verbose);
+		if (triplestore_load(t, filename, ctx->verbose)) {
+			ctx->set_error(-1, "Failed to LOAD data");
+			return 1;
+		}
 		uint32_t count	= triplestore_size(t);
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "loaded %"PRIu32" triples in %lfs (%5.1f triples/second)\n", count, elapsed, ((double)count/elapsed));
 		}
 	} else if (!strcmp(op, "dump")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "DUMPing of data not allowed");
+			return 1;
+		}
 		const char* filename	= argv[++i];
 		double start	= triplestore_current_time();
 		triplestore_dump(t, filename);
@@ -871,11 +894,19 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			fprintf(stderr, "dumped %"PRIu32" triples in %lfs (%5.1f triples/second)\n", count, elapsed, ((double)count/elapsed));
 		}
 	} else if (!strcmp(op, "import")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "IMPORTing of data not allowed");
+			return 1;
+		}
 		const char* filename	= argv[++i];
 		if (triplestore__load_file(t, filename, ctx->verbose)) {
 			fprintf(stderr, "Failed to import file %s\n", filename);
 		}
 	} else if (!strcmp(op, "debug")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "DEBUG not allowed");
+			return 1;
+		}
 		fprintf(stdout, "Triplestore:\n");
 		fprintf(stdout, "- Nodes: %"PRIu32"\n", t->nodes_used);
 		for (uint32_t i = 1; i <= t->nodes_used; i++) {
@@ -893,12 +924,28 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		fprintf(stdout, "- Edges: %"PRIu32"\n", t->edges_used);
 	} else if (!strcmp(op, "data")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "DATA not allowed");
+			return 1;
+		}
 		triplestore_print_data(t, stdout);
 	} else if (!strcmp(op, "nodes")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "NODES not allowed");
+			return 1;
+		}
 		triplestore_node_dump(t, ctx->limit, stdout);
 	} else if (!strcmp(op, "edges")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "EDGES not allowed");
+			return 1;
+		}
 		triplestore_edge_dump(t, ctx->limit, stdout);
 	} else if (!strcmp(op, "test")) {
+		if (ctx->sandbox) {
+			ctx->set_error(-1, "TEST not allowed");
+			return 1;
+		}
 		query_t* query	= construct_bgp_query(t, ctx, argc, argv, i);
 		if (ctx->verbose) {
 			fprintf(stderr, "Matching Query:\n");
