@@ -244,6 +244,19 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 		if (s < 0) { seen[-s]++; }
 		if (p < 0) { seen[-p]++; }
 		if (o < 0) { seen[-o]++; }
+		
+		if (j == 0) {
+			if (triples > 2) {
+				if (s < 0 && p < 0 && o < 0) {
+					free(ids);
+					free(seen);
+					triplestore_free_query(query);
+					triplestore_free_bgp(bgp);
+					ctx->set_error(-1, "BGP with all-variable first triple is not allowed");
+					return NULL;
+				}
+			}
+		}
 		triplestore_bgp_set_triple_nodes(bgp, j, s, p, o);
 	}
 	free(ids);
