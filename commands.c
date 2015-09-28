@@ -408,11 +408,9 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rd
 		}
 		
 		return 0;
-	} else {
+	} else if (ts[0] == '?') {
 		char* p		= (char*) ts;
-		if (p[0] == '?') {
-			p++;
-		}
+		p++;
 		
 		long len	= strlen(p);
 		
@@ -425,6 +423,8 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rd
 		*datatype		= NULL;
 		*datatype_len	= 0;
 		return 0;
+	} else {
+		return 1;
 	}
 }
 
