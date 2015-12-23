@@ -427,6 +427,7 @@ int free_triplestore(triplestore_t* t) {
 
 int triplestore_set_read_only(triplestore_t* t) {
 	t->read_only	= 1;
+	return 0;
 }
 
 int triplestore_read_only(triplestore_t* t) {
@@ -682,7 +683,7 @@ table_t* triplestore_new_table(int width) {
 	table->width	= width;
 	table->alloc	= 128;
 	table->used		= 0;
-	table->ptr		= calloc(table->alloc, (1+width) * sizeof(nodeid_t));
+	table->ptr		= calloc(table->alloc, (1+width) * sizeof(binding_t));
 	return table;
 }
 
@@ -692,15 +693,15 @@ int triplestore_free_table(table_t* table) {
 	return 0;
 }
 
-uint32_t* triplestore_table_row_ptr(table_t* table, int row) {
-	nodeid_t* p = &( table->ptr[ row*(1+table->width) ] );
+binding_t* triplestore_table_row_ptr(table_t* table, int row) {
+	binding_t* p = &( table->ptr[ row*(1+table->width) ] );
 	return p;
 }
 
-int triplestore_table_add_row(table_t* table, nodeid_t* result) {
+int triplestore_table_add_row(table_t* table, binding_t* result) {
 	if (table->used == table->alloc) {
 		table->alloc	*= 2;
-		size_t requested	= table->alloc * (1+table->width) * sizeof(nodeid_t);
+		size_t requested	= table->alloc * (1+table->width) * sizeof(binding_t);
 // 		fprintf(stderr, "Reallocating to %zu bytes (currently have %d rows)\n", requested, table->used);
 		table->ptr	= realloc(table->ptr, requested);
 		if (table->ptr == NULL) {
@@ -709,8 +710,8 @@ int triplestore_table_add_row(table_t* table, nodeid_t* result) {
 		}
 	}
 	int i	= table->used++;
-	nodeid_t* p = &( table->ptr[ i*(1+table->width) ] );
-	memcpy(p, result, (1+table->width) * sizeof(nodeid_t));
+	binding_t* p = &( table->ptr[ i*(1+table->width) ] );
+	memcpy(p, result, (1+table->width) * sizeof(binding_t));
 	return 0;
 }
 
@@ -743,13 +744,13 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 	triplestore_t* t	= s->t;
 	sort_t* sort		= s->sort;
 	uint32_t width		= sort->size;
-	uint32_t* ap		= (uint32_t*) a;
-	uint32_t* bp		= (uint32_t*) b;
+	binding_t* ap		= (binding_t*) a;
+	binding_t* bp		= (binding_t*) b;
 	
 	for (int i = 0; i < width; i++) {
 		int64_t slot	= -(sort->vars[i]);
-		nodeid_t aid	= ap[slot];
-		nodeid_t bid	= bp[slot];
+		binding_t aid	= ap[slot];
+		binding_t bid	= bp[slot];
 		if (aid == 0 && bid == 0) {
 			continue;
 		} else if (aid == 0) {
@@ -791,7 +792,7 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 
 int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort) {
 	struct _sort_s s	= { .t = t, .sort = sort };
-	size_t bytes	= (1+table->width) * sizeof(nodeid_t);
+	size_t bytes	= (1+table->width) * sizeof(binding_t);
 #ifdef __APPLE__
 	qsort_r(table->ptr, table->used, bytes, &s, _table_row_cmp);
 #else
@@ -903,7 +904,7 @@ int _filter_args_are_term_compatible(query_filter_t* filter, rdf_term_t* term) {
 	return 0;
 }
 
-int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* filter, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* filter, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	int64_t node1;
 	int64_t node2;
 	int rc;
@@ -951,7 +952,7 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 //				fprintf(stderr, "CONTAINS argument does not map to a variable (%"PRId64"\n", filter->node1);
 				return 0;
 			}
-			tmpid	= current_match[-(filter->node1)];
+			tmpid	= (nodeid_t)current_match[-(filter->node1)];
 			if (!tmpid) {
 //				fprintf(stderr, "CONTAINS variable does not map to a term\n");
 				return 0;
@@ -1041,7 +1042,7 @@ int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t 
 	return 0;
 }
 
-int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	if (current_triple == bgp->triples) {
 		return block(current_match);
 	}
@@ -1116,8 +1117,8 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, nod
 }
 
 // final_match is a node ID array with final_match[0] representing the number of following node IDs
-int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(nodeid_t* final_match)) {
-	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+variables);
+int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(binding_t* final_match)) {
+	binding_t* current_match = calloc(sizeof(binding_t), 1+variables);
 	current_match[0]	= variables;
 	int r	= _triplestore_bgp_match(t, bgp, 0, current_match, block);
 	free(current_match);
@@ -1145,9 +1146,16 @@ int triplestore_set_projection(project_t* project, int64_t var) {
 	return 0;
 }
 
-int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
-	for (int i = 1; i <= project->size; i++) {
-		if (project->keep[i] == 0) {
+int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, binding_t* current_match, int(^block)(binding_t* final_match)) {
+	int vars	= triplestore_query_get_max_variables(query);
+	int psize	= project->size;
+// 	fprintf(stderr, "%d %d\n", vars, psize);
+	for (int i = 1; i <= vars; i++) {
+		const char* var	= query->variable_names[i];
+		if (i <= vars && i <= psize && project->keep[i] != 0) {
+// 			fprintf(stderr, "Keep %d ?%s\n", i, var);
+		} else {
+// 			fprintf(stderr, "Drop %d ?%s\n", i, var);
 			current_match[i]	= 0;
 		}
 	}
@@ -1179,7 +1187,7 @@ int triplestore_set_sort(sort_t* sort, int rank, int64_t var) {
 	return 0;
 }
 
-int _triplestore_sort_fill(triplestore_t* t, query_t* query, sort_t* sort, nodeid_t* current_match) {
+int _triplestore_sort_fill(triplestore_t* t, query_t* query, sort_t* sort, binding_t* current_match) {
 	return triplestore_table_add_row(sort->table, current_match);
 }
 
@@ -1229,7 +1237,7 @@ int _triplestore_path_step(triplestore_t* t, nodeid_t s, nodeid_t pred, char* se
 	return r;
 }
 
-int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	if (path->type == PATH_STAR) {
 		fprintf(stderr, "*** should emit graph terms for * path\n");
 	}
@@ -1283,8 +1291,8 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, nodeid_t* current_ma
 	return r;
 }
 
-int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(nodeid_t* final_match)) {
-	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+variables);
+int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(binding_t* final_match)) {
+	binding_t* current_match = calloc(sizeof(binding_t), 1+variables);
 	current_match[0]	= variables;
 	int r				= _triplestore_path_match(t, path, current_match, block);
 	free(current_match);
@@ -1428,23 +1436,23 @@ int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
 	return 0;
 }
 
-int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op, nodeid_t* current_match, int(^block)(nodeid_t* final_match)) {
+int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	if (op) {
 		switch (op->type) {
 			case QUERY_BGP:
-				return _triplestore_bgp_match(t, op->ptr, 0, current_match, ^(nodeid_t* final_match){
+				return _triplestore_bgp_match(t, op->ptr, 0, current_match, ^(binding_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_FILTER:
-				return _triplestore_filter_match(t, query, op->ptr, current_match, ^(nodeid_t* final_match){
+				return _triplestore_filter_match(t, query, op->ptr, current_match, ^(binding_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_PROJECT:
-				return _triplestore_project(t, query, op->ptr, current_match, ^(nodeid_t* final_match){
+				return _triplestore_project(t, query, op->ptr, current_match, ^(binding_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_PATH:
-				return _triplestore_path_match(t, op->ptr, current_match, ^(nodeid_t* final_match){
+				return _triplestore_path_match(t, op->ptr, current_match, ^(binding_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_SORT:
@@ -1458,9 +1466,9 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 	}
 }
 
-int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match)) {
-//	triplestore_print_query(t, query, stderr);
-	nodeid_t* current_match = calloc(sizeof(nodeid_t), 1+triplestore_query_get_max_variables(query));
+int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(binding_t* final_match)) {
+// 	triplestore_print_query(t, query, stderr);
+	binding_t* current_match = calloc(sizeof(binding_t), 1+triplestore_query_get_max_variables(query));
 	current_match[0]	= triplestore_query_get_max_variables(query);
 	query_op_t* op		= query->head;
 	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
@@ -1476,13 +1484,13 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 			sort_t* sort	= (sort_t*) op->ptr;
 			table_t* table	= sort->table;
 			triplestore_table_sort(t, table, sort);
-			int size			= sizeof(nodeid_t) * (1+triplestore_query_get_max_variables(query));
-			nodeid_t* last		= calloc(1, size);
+			int size			= sizeof(binding_t) * (1+triplestore_query_get_max_variables(query));
+			binding_t* last		= calloc(1, size);
 			if (!last) {
 				return 1;
 			}
 			for (uint32_t row = 0; row < table->used; row++) {
-				uint32_t* result	= triplestore_table_row_ptr(table, row);
+				binding_t* result	= triplestore_table_row_ptr(table, row);
 				if (sort->unique) {
 					if (memcmp(last, result, size)) {
 						memcpy(last, result, size);

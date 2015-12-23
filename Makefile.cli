@@ -23,8 +23,8 @@ runner: runner.c triplestore.o avl.o linenoise.o
 server: server.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
 	$(CC) $(LDLIBS) $(CFLAGS) -o server server.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
 
-fuzz: fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o
-	$(CC) $(LDLIBS) $(CFLAGS) -o fuzz fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o
+fuzz: fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
+	$(CC) $(LDLIBS) $(CFLAGS) -o fuzz fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
 
 clean:
 	rm -f ts

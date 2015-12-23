@@ -127,7 +127,7 @@ int triplestore_match_terms(triplestore_t* t, const char* pattern, int64_t limit
 			re,							/* the compiled pattern */
 			NULL,						/* no extra data - we didn't study the pattern */
 			string,						/* the subject string */
-			strlen(string),				/* the length of the subject */
+			(int) strlen(string),		/* the length of the subject */
 			0,							/* start at offset 0 in the subject */
 			0,							/* default options */
 			ovector,					/* output vector for substring information */
@@ -176,7 +176,7 @@ int _triplestore_run_query(triplestore_t* t, query_t* query, struct command_ctx_
 	
 	double start	= triplestore_current_time();
 	__block int count	= 0;
-	triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+	triplestore_query_match(t, query, -1, ^(binding_t* final_match){
 		count++;
 		if (ctx->result_block) {
 			ctx->result_block(query, final_match);
@@ -340,7 +340,7 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rd
 				fprintf(stderr, "cannot parse typed literal value\n");
 				return 1;
 			}
-			int len			= q - p + 1;
+			int len			= (int) (q - p + 1);
 			*type			= TERM_TYPED_LITERAL;
 			*language		= NULL;
 			*language_len	= 0;
@@ -651,15 +651,15 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			s	= atoi(ss);
 		} else {
 			s	= var--;
-			triplestore_ensure_variable_capacity(query, -s);
-			triplestore_query_set_variable_name(query, -s, ss);
+			triplestore_ensure_variable_capacity(query, -((nodeid_t)s));
+			triplestore_query_set_variable_name(query, -((nodeid_t)s), ss);
 		}
 
 		if (isdigit(os[0])) {
 			o	= atoi(os);
 		} else {
 			o	= var--;
-			triplestore_query_set_variable_name(query, -o, os);
+			triplestore_query_set_variable_name(query, -((nodeid_t)o), os);
 		}
 
 		path_t* path	= triplestore_new_path(t, PATH_PLUS, s, (nodeid_t) p, o);
@@ -967,7 +967,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		
 		table_t* table	= triplestore_new_table(triplestore_query_get_max_variables(query));
 		double start	= triplestore_current_time();
-		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+		triplestore_query_match(t, query, -1, ^(binding_t* final_match){
 			triplestore_table_add_row(table, final_match);
 			return 0;
 		});
@@ -976,9 +976,9 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 // 		triplestore_table_sort(t, table);
 		if (f != NULL) {
 			for (int row = 0; row < count; row++) {
-				uint32_t* result	= triplestore_table_row_ptr(table, row);
+				binding_t* result	= triplestore_table_row_ptr(table, row);
 				for (int j = 1; j <= triplestore_query_get_max_variables(query); j++) {
-					nodeid_t id	= result[j];
+					nodeid_t id	= (nodeid_t)result[j];
 					fprintf(f, "%s=", query->variable_names[j]);
 					triplestore_print_term(t, id, f, 0);
 					fprintf(f, " ");
@@ -1017,7 +1017,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		double start	= triplestore_current_time();
 		__block int count	= 0;
-		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+		triplestore_query_match(t, query, -1, ^(binding_t* final_match){
 			count++;
 			return 0;
 		});
@@ -1061,10 +1061,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			fprintf(stderr, "Unrecognized aggregate operation. Assuming count.\n");
 		}
 		uint32_t* counts	= calloc(sizeof(uint32_t), 1+t->nodes_used);
-		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+		triplestore_query_match(t, query, -1, ^(binding_t* final_match){
 			nodeid_t group	= 0;
 			if (groupvar != 0) {
-				group	= final_match[-groupvar];
+				group	= (nodeid_t) final_match[-groupvar]; // TODO: reassess this cast when moving creating terms during aggregation
 // 				fprintf(stderr, "aggregating in group %"PRIu32" ", group);
 // 				triplestore_print_term(t, group, stderr, 1);
 			}

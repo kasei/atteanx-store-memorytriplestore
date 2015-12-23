@@ -22,7 +22,7 @@ struct command_ctx_s {
 	int constructing;
 	char* language;
 	void (^set_error)(int code, const char* message);
-	void(^result_block)(query_t* query, nodeid_t* final_match);
+	void(^result_block)(query_t* query, binding_t* final_match);
 	void(^preamble_block)(query_t* query);
 };
 

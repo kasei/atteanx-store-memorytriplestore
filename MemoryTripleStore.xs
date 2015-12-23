@@ -213,16 +213,16 @@ handle_new_triple_object (triplestore_t* t, SV* closure, rdf_term_t* subject, rd
 }
 
 void
-handle_new_result_object (triplestore_t* t, SV* closure, int variables, char** variable_names, nodeid_t* match) {
+handle_new_result_object (triplestore_t* t, SV* closure, int variables, char** variable_names, binding_t* match) {
 	HV*	hash	= newHV();
-	// fprintf(stderr, "constructing result from table:\n");
+// 	fprintf(stderr, "constructing result from table:\n");
 	for (int j = 1; j <= variables; j++) {
-		nodeid_t id			= match[j];
+		binding_t id			= (binding_t) match[j];
 		if (id > 0) {
-			// fprintf(stderr, "[%d]: %"PRIu32"\n", j, id);
 			rdf_term_t* term	= t->graph[id]._term;
 			SV* object			= rdf_term_to_object(t, term);
 			const char* key		= variable_names[j];
+// 			fprintf(stderr, "[%d]: ?%s -> %"PRIu32"\n", j, key, id);
 			hv_store(hash, key, strlen(key), object, 0);
 		}
 	}
@@ -406,7 +406,7 @@ query_DESTROY (query_t* query)
 void
 query__evaluate(query_t* query, triplestore_t* t, SV* closure)
 	CODE:
-		triplestore_query_match(t, query, -1, ^(nodeid_t* final_match){
+		triplestore_query_match(t, query, -1, ^(binding_t* final_match){
 			handle_new_result_object(t, closure, triplestore_query_get_max_variables(query), query->variable_names, final_match);
 			return 0;
 		});

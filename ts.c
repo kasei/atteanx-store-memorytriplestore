@@ -42,7 +42,7 @@ int main (int argc, char** argv) {
 		.set_error			= ^(int code, const char* message){
 			fprintf(stderr, "%s\n", message);
 		},
-		.result_block		= ^(query_t* query, nodeid_t* final_match){
+		.result_block		= ^(query_t* query, binding_t* final_match){
 			for (int j = 1; j <= triplestore_query_get_max_variables(query); j++) {
 				nodeid_t id	= final_match[j];
 				if (id > 0) {

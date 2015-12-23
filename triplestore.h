@@ -10,6 +10,7 @@
 #include "avl.h"
 
 typedef uint32_t nodeid_t;
+typedef uint64_t binding_t;
 
 typedef enum {
 	TERM_IRI					= 1,
@@ -52,7 +53,7 @@ typedef struct table_s {
 	int alloc;
 	int used;
 	int width;
-	nodeid_t* ptr;
+	binding_t* ptr;
 } table_t;
 
 typedef struct rdf_term_s {
@@ -185,7 +186,7 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose);
 int triplestore__load_file(triplestore_t* t, const char* filename, int verbose);
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o));
-int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(nodeid_t* final_match));
+int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(binding_t* final_match));
 
 void triplestore_print_bgp(triplestore_t* t, bgp_t* bgp, int variables, char** variable_names, FILE* f);
 int triplestore_print_term(triplestore_t* t, nodeid_t s, FILE* f, int newline);
@@ -198,7 +199,7 @@ int triplestore_ensure_variable_capacity(query_t* query, int var);
 int64_t triplestore_query_add_variable(query_t* query, const char* name);
 int64_t triplestore_query_add_variable_n(query_t* query, const char* name, size_t name_len);
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
-int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(nodeid_t* final_match));
+int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(binding_t* final_match));
 int triplestore_query_get_max_variables(query_t* query);
 
 // BGPs
@@ -209,7 +210,7 @@ int triplestore_bgp_set_triple_nodes(bgp_t* bgp, int triple, int64_t s, int64_t 
 // Paths
 path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end);
 int triplestore_free_path(path_t* path);
-int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(nodeid_t* final_match));
+int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(binding_t* final_match));
 
 // Filters
 query_filter_t* triplestore_new_filter(filter_type_t type, ...);
@@ -224,9 +225,9 @@ int triplestore_set_sort(sort_t* sort, int rank, int64_t var);
 // Result Tables
 table_t* triplestore_new_table(int width);
 int triplestore_free_table(table_t* table);
-int triplestore_table_add_row(table_t* table, nodeid_t* result);
+int triplestore_table_add_row(table_t* table, binding_t* result);
 int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort);
-uint32_t* triplestore_table_row_ptr(table_t* table, int row);
+binding_t* triplestore_table_row_ptr(table_t* table, int row);
 
 // Projection
 project_t* triplestore_new_project(triplestore_t* t, int variables);

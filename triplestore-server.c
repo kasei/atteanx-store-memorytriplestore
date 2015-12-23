@@ -312,7 +312,7 @@ int triplestore_run_server(triplestore_server_t* s) {
 
 static size_t fwrite_tsv(const char* ptr, size_t size, size_t nitems, FILE *restrict stream) {
 	int needs_escape	= 0;
-	int bytes	= size * nitems;
+	unsigned long bytes	= size * nitems;
 	for (int i = 0; i < size * bytes; i++) {
 		if (ptr[i] == '\r' || ptr[i] == '\n' || ptr[i] == '\t') {
 			needs_escape++;
@@ -388,16 +388,17 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 	}
 }
 
-int serialize_result(triplestore_server_t* s, struct command_ctx_s* ctx, FILE* f, triplestore_t* t, query_t* query, nodeid_t* result) {
+int serialize_result(triplestore_server_t* s, struct command_ctx_s* ctx, FILE* f, triplestore_t* t, query_t* query, binding_t* result) {
 	if (f != NULL) {
 		int vars	= triplestore_query_get_max_variables(query);
 		for (int j = 1; j <= vars; j++) {
-			nodeid_t id = result[j];
+			nodeid_t id = (nodeid_t) result[j];
+// 			fprintf(f, "(%"PRIu32")", id);
 			if (id > 0) {
 				triplestore_print_tsv_term(s, ctx, t, id, f);
-				if (j < vars) {
-					fprintf(f, "\t");
-				}
+			}
+			if (j < vars) {
+				fprintf(f, "\t");
 			}
 		}
 		fprintf(f, "\n");
@@ -419,7 +420,7 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 		write_tsv_results_header(out, query);
 	};
 	
-	ctx.result_block		= ^(query_t* query, nodeid_t* final_match){
+	ctx.result_block		= ^(query_t* query, binding_t* final_match){
 		serialize_result(s, &ctx, out, t, query, final_match);
 	};
 	

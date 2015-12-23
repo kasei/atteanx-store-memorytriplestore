@@ -1,3 +1,4 @@
+.gitignore
 .DS_Store
 .triplestore-history
 *.o
@@ -12,3 +13,4 @@ blib
 pm_to_blib
 *.nt
 *.tar.gz
+*.q
