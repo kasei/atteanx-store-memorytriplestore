@@ -1,5 +1,4 @@
-#ifndef _COMMANDS_H
-#define _COMMANDS_H
+#pragma once
 
 #include <unistd.h>
 #include <assert.h>
@@ -32,5 +31,3 @@ int64_t triplestore_query_get_variable_id_n(query_t* query, const char* var, siz
 int64_t triplestore_query_get_variable_id(query_t* query, const char* var);
 int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char** argv);
 int triplestore_vop(triplestore_t* t, struct command_ctx_s* ctx, int argc, ...);
-
-#endif

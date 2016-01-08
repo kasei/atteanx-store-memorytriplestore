@@ -1,5 +1,4 @@
-#ifndef _TRIPLESTORE_SERVER_H
-#define _TRIPLESTORE_SERVER_H
+#pragma once
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -36,5 +35,3 @@ int triplestore_free_server(triplestore_server_t* s);
 
 int triplestore_run_server(triplestore_server_t* s);
 int triplestore_read_and_run_query(triplestore_server_t* s, FILE* in, FILE* out);
-
-#endif

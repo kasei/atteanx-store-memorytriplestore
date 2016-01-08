@@ -1,5 +1,4 @@
-#ifndef _TRIPLESTORE_H
-#define _TRIPLESTORE_H
+#pragma once
 
 #include <pcre.h>
 #include <raptor2.h>
@@ -235,5 +234,3 @@ binding_t* triplestore_table_row_ptr(table_t* table, int row);
 project_t* triplestore_new_project(triplestore_t* t, int variables);
 int triplestore_free_project(project_t* project);
 int triplestore_set_projection(project_t* project, int64_t var);
-
-#endif
