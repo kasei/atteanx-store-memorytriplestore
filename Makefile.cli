@@ -1,5 +1,5 @@
 LDLIBS	= -lraptor2 -lpcre -L/usr/local/lib
-CFLAGS	= -fblocks -g -Werror -Wextra -Wpedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2 -I/usr/local/include
+CFLAGS	= -march=native -fblocks -g -Werror -Wextra -Wpedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2 -I/usr/local/include
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
 	LDLIBS += -lBlocksRuntime -ldispatch
