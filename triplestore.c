@@ -24,25 +24,25 @@ struct parser_ctx_s {
 	uint64_t count;
 	uint64_t graph;
 	double start;
-	triplestore_t* store;
+	triplestore_t *store;
 	uint64_t timestamp;
 };
 
 typedef struct {
 	nodeid_t id;
-	rdf_term_t* _term;
+	rdf_term_t *_term;
 } hx_nodemap_item;
 
-double triplestore_current_time ( void ) {
+double triplestore_current_time(void) {
 	struct timeval t;
-	gettimeofday (&t, NULL);
+	gettimeofday(&t, NULL);
 	double start	= t.tv_sec + (t.tv_usec / 1000000.0);
 	return start;
 }
 
-double triplestore_elapsed_time ( double start ) {
+double triplestore_elapsed_time(double start) {
 	struct timeval t;
-	gettimeofday (&t, NULL);
+	gettimeofday(&t, NULL);
 	double time = t.tv_sec + (t.tv_usec / 1000000.0);
 	double elapsed	= time - start;
 	return elapsed;
@@ -57,7 +57,7 @@ double triplestore_elapsed_time ( double start ) {
 #pragma mark -
 #pragma mark RDF Terms
 
-static int _value_matches_regex(const char* value, pcre* re) {
+static int _value_matches_regex(const char *value, pcre *re) {
 	int OVECCOUNT	= 30;
 	int ovector[OVECCOUNT];
 	int rc = pcre_exec(
@@ -74,25 +74,27 @@ static int _value_matches_regex(const char* value, pcre* re) {
 }
 
 static const char* _parse_results ( int rc, int pos, const char* value, int* ovector, int* result_length ) {
-	if (pos >= rc)
+	if (pos >= rc) {
 		return NULL;
-	if (ovector[2*pos] == -1)
+	}
+	if (ovector[2 * pos] == -1) {
 		return NULL;
-	if (result_length)
-		*result_length	= ovector[2*pos+1] - ovector[2*pos];
-	return value + ovector[2*pos];
+	}
+	if (result_length) {
+		*result_length = ovector[2 * pos + 1] - ovector[2 * pos];
+	}
+	return value + ovector[2 * pos];
 }
 
-
-rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id) {
-	rdf_term_t* term	= t->graph[id]._term;
+rdf_term_t *triplestore_get_term(triplestore_t *t, nodeid_t id) {
+	rdf_term_t *term	= t->graph[id]._term;
 	return term;
 }
 
 rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const char* _value, size_t value_len, const char* _vtype, size_t vtype_len, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
-	char* v				= calloc(1, sizeof(rdf_term_t) + value_len + 1);
-	rdf_term_t* term	= (rdf_term_t*) v;
+	char *v				= calloc(1, sizeof(rdf_term_t) + value_len + 1);
+	rdf_term_t *term	= (rdf_term_t*) v;
 	term->value			= v + sizeof(rdf_term_t);
 	term->type			= type;
 	term->vtype.value_type.is_numeric	= 0;
