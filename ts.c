@@ -13,7 +13,9 @@
 #pragma mark -
 
 void usage(int argc, char** argv, FILE* f) {
-	fprintf(f, "Usage: %s [-v] [-p] input.nt OP\n\n", argv[0]);
+	if (argc > 0) {
+		fprintf(f, "Usage: %s [-v] [-p] input.nt OP\n\n", argv[0]);
+	}
 }
 
 int main (int argc, char** argv) {
@@ -40,7 +42,7 @@ int main (int argc, char** argv) {
 		.language			= NULL,
 		.query				= NULL,
 		.set_error			= ^(int code, const char* message){
-			fprintf(stderr, "%s\n", message);
+			fprintf(stderr, "(%d) %s\n", code, message);
 		},
 		.result_block		= ^(query_t* query, binding_t* final_match){
 			for (int j = 1; j <= triplestore_query_get_max_variables(query); j++) {

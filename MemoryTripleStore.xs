@@ -146,7 +146,7 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			value_key	= newSVpvs("value");
 			class	= newSVpvs("Attean::Literal");
 			string	= newSVpv((const char*) term->value, 0);
-			lang	= newSVpv((const char*) &(term->vtype.value_type), 0);
+			lang	= newSVpv((const char*) &(term->vtype.value_lang), 0);
 			object	= new_node_instance(aTHX_ class, 4, value_key, string, lang_key, lang);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(lang);
@@ -155,7 +155,7 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			return object;
 		case TERM_TYPED_LITERAL:
 			class		= newSVpvs("Attean::IRI");
-			dtvalue		= t->graph[ term->vtype.value_id ]._term->value;
+			dtvalue		= t->graph[ term->vtype.value_type.value_id ]._term->value;
 			value		= newSVpv(dtvalue, strlen(dtvalue));
 			dt			= new_node_instance(aTHX_ class, 1, value);
 			SvREFCNT_dec(value);

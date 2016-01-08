@@ -6,7 +6,9 @@
 #pragma mark -
 
 void usage(int argc, char** argv, FILE* f) {
-	fprintf(f, "Usage: %s PORT input.nt\n\n", argv[0]);
+	if (argc > 0) {
+		fprintf(f, "Usage: %s PORT input.nt\n\n", argv[0]);
+	}
 }
 
 int main (int argc, char** argv) {

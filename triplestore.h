@@ -50,21 +50,23 @@ typedef enum {
 } filter_type_t;
 
 typedef struct table_s {
-	int alloc;
-	int used;
-	int width;
+	uint32_t alloc;
+	uint32_t used;
+	uint32_t width;
 	binding_t* ptr;
 } table_t;
 
 typedef struct rdf_term_s {
-	rdf_term_type_t type;
 	char* value;
 	union {
-		int64_t value_id;
-		int64_t value_type;	// a 1-7 char string plus trailing NULL is going to be packed into this integer
+		struct {
+			double numeric_value;
+			nodeid_t value_id;
+			char is_numeric;
+		} value_type;
+		int64_t value_lang;	// depending on the term type, instead of a value_id, we might pack a 1-7 char string plus trailing NULL into the value_lang integer (e.g. the language tag string for TERM_LANG_LITERAL)
 	} vtype;
-	int is_numeric;
-	double numeric_value;
+	rdf_term_type_t type;
 } rdf_term_t;
 
 typedef struct index_list_element_s {
@@ -138,11 +140,11 @@ typedef struct query_filter_s {
 typedef struct triplestore_s {
 	int read_only;
 	
-	int edges_alloc;
-	int edges_used;
+	uint32_t edges_alloc;
+	uint32_t edges_used;
 	
-	int nodes_alloc;
-	int nodes_used;
+	uint32_t nodes_alloc;
+	uint32_t nodes_used;
 	
 	index_list_element_t* edges;
 	graph_node_t* graph;
@@ -158,7 +160,7 @@ typedef struct triplestore_s {
 	pcre* lang_re;
 	
 	int verify_datatypes;
-	int bnode_prefix;
+	nodeid_t bnode_prefix;
 } triplestore_t;
 
 double triplestore_current_time ( void );

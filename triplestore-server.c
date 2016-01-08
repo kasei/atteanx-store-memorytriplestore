@@ -20,7 +20,7 @@ static int server_ctx_set_error(struct command_ctx_s* ctx, char* message) {
 	return 1;
 }
 
-static int triplestore_output_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char** argv) {
+static int triplestore_output_op(struct command_ctx_s* ctx, int argc, char** argv) {
 	if (argc == 0) {
 		return 0;
 	}
@@ -128,7 +128,7 @@ static int write_http_error_header(struct command_ctx_s* ctx, FILE* out, int cod
 	return 0;
 }
 
-static int read_http_header(triplestore_server_t* server, FILE* in, int* length) {
+static int read_http_header(FILE* in, int* length) {
 //	fprintf(stderr, "Reading HTTP header:\n");
 //	fprintf(stderr, "-------------------------\n");
 	int cl					= 0;
@@ -216,7 +216,6 @@ static void* consume(void* thunk) {
 		triplestore_read_and_run_query(s, f, f);
 		fclose(f);
 	}
-end_consume:
 	return NULL;
 }
 
@@ -313,7 +312,7 @@ int triplestore_run_server(triplestore_server_t* s) {
 static size_t fwrite_tsv(const char* ptr, size_t size, size_t nitems, FILE *restrict stream) {
 	int needs_escape	= 0;
 	unsigned long bytes	= size * nitems;
-	for (int i = 0; i < size * bytes; i++) {
+	for (size_t i = 0; i < size * bytes; i++) {
 		if (ptr[i] == '\r' || ptr[i] == '\n' || ptr[i] == '\t') {
 			needs_escape++;
 		}
@@ -321,7 +320,7 @@ static size_t fwrite_tsv(const char* ptr, size_t size, size_t nitems, FILE *rest
 	
 	if (needs_escape) {
 		size_t bytes	= 0;
-		for (int i = 0; i < size * nitems; i++) {
+		for (size_t i = 0; i < size * nitems; i++) {
 			if (ptr[i] == '\r') {
 				bytes	+= fwrite("\\r", 1, 2, stream);
 			} else if (ptr[i] == '\n') {
@@ -339,7 +338,7 @@ static size_t fwrite_tsv(const char* ptr, size_t size, size_t nitems, FILE *rest
 	}
 }
 
-static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ctx_s* ctx, triplestore_t* t, nodeid_t id, FILE* f) {
+static int triplestore_print_tsv_term(struct command_ctx_s* ctx, triplestore_t* t, nodeid_t id, FILE* f) {
 	if (id > t->nodes_used) {
 		ctx->set_error(-1, "Undefined term ID found in query result");
 		return 1;
@@ -354,7 +353,7 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 			fwrite(">", 1, 1, f);
 			return 0;
 		case TERM_BLANK:
-			fprintf(f, "_:b%"PRIu32"b%s", (uint32_t) term->vtype.value_id, term->value);
+			fprintf(f, "_:b%"PRIu32"b%s", (uint32_t) term->vtype.value_type.value_id, term->value);
 			return 0;
 		case TERM_XSDSTRING_LITERAL:
 			fwrite("\"", 1, 1, f);
@@ -364,10 +363,10 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 		case TERM_LANG_LITERAL:
 			fwrite("\"", 1, 1, f);
 			fwrite_tsv(term->value, 1, strlen(term->value), f);
-			fprintf(f, "\"@%s", (char*) &(term->vtype.value_type));
+			fprintf(f, "\"@%s", (char*) &(term->vtype.value_lang));
 			return 0;
 		case TERM_TYPED_LITERAL:
-			datatype	= t->graph[term->vtype.value_id]._term->value;
+			datatype	= t->graph[term->vtype.value_type.value_id]._term->value;
 			if (!strcmp(datatype, "http://www.w3.org/2001/XMLSchema#decimal")) {
 				fwrite_tsv(term->value, 1, strlen(term->value), f);
 			} else if (!strcmp(datatype, "http://www.w3.org/2001/XMLSchema#integer")) {
@@ -388,14 +387,14 @@ static int triplestore_print_tsv_term(triplestore_server_t* s, struct command_ct
 	}
 }
 
-int serialize_result(triplestore_server_t* s, struct command_ctx_s* ctx, FILE* f, triplestore_t* t, query_t* query, binding_t* result) {
+static int serialize_result(struct command_ctx_s* ctx, FILE* f, triplestore_t* t, query_t* query, binding_t* result) {
 	if (f != NULL) {
 		int vars	= triplestore_query_get_max_variables(query);
 		for (int j = 1; j <= vars; j++) {
 			nodeid_t id = (nodeid_t) result[j];
 // 			fprintf(f, "(%"PRIu32")", id);
 			if (id > 0) {
-				triplestore_print_tsv_term(s, ctx, t, id, f);
+				triplestore_print_tsv_term(ctx, t, id, f);
 			}
 			if (j < vars) {
 				fprintf(f, "\t");
@@ -421,12 +420,12 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 	};
 	
 	ctx.result_block		= ^(query_t* query, binding_t* final_match){
-		serialize_result(s, &ctx, out, t, query, final_match);
+		serialize_result(&ctx, out, t, query, final_match);
 	};
 	
 	ctx.set_error	= ^(int code, const char* message){
 		if (0) {
-			fprintf(stderr, "*** set_error called: %s\n", message);
+			fprintf(stderr, "*** set_error called: (%d) %s\n", code, message);
 		}
 		server_ctx_set_error(&ctx, (char*) message);
 	};
@@ -493,7 +492,7 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 			}
 		}
 		
-		if (triplestore_output_op(t, &ctx, argc, argv)) {
+		if (triplestore_output_op(&ctx, argc, argv)) {
 			if (s->use_http) {
 				write_http_header(out, 200, "OK", "text/tab-separated-values; charset=utf-8");
 			}
@@ -547,7 +546,7 @@ int triplestore_read_and_run_query(triplestore_server_t* server, FILE* in, FILE*
 	triplestore_t* t	= server->t;
 	int length	= 0;
 	if (server->use_http) {
-		if (read_http_header(server, in, &length)) {
+		if (read_http_header(in, &length)) {
 			return 1;
 		}
 	} else {
@@ -557,7 +556,7 @@ int triplestore_read_and_run_query(triplestore_server_t* server, FILE* in, FILE*
 	size_t total		= 0;
 	assert(length < server->buffer_size);
 
-	const int needed	= length;
+	const size_t needed	= length;
 	char* buffer		= calloc(1, server->buffer_size);
 	while (total < needed) {
 		size_t bytes	= fread(&(buffer[total]), 1, needed-total, in);

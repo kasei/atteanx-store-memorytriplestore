@@ -1,5 +1,5 @@
 LDLIBS	= -lraptor2 -lpcre -L/usr/local/lib
-CFLAGS	= -fblocks -g -pedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2 -I/usr/local/include
+CFLAGS	= -fblocks -g -Werror -Wextra -Wpedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2 -I/usr/local/include
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
 	LDLIBS += -lBlocksRuntime -ldispatch
@@ -28,6 +28,8 @@ fuzz: fuzz.c triplestore.o avl.o linenoise.o triplestore-server.o commands.o
 
 clean:
 	rm -f ts
+	rm -f fuzz
+	rm -f runner
 	rm -f server
 	rm -f avl.o linenoise.o triplestore.o triplestore-server.o
 	rm -rf *.dSYM

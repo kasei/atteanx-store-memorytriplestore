@@ -164,7 +164,7 @@ int triplestore_match_terms(triplestore_t* t, const char* pattern, int64_t limit
 	return 0;
 }
 
-int _triplestore_run_query(triplestore_t* t, query_t* query, struct command_ctx_s* ctx, FILE* f) {
+static int _triplestore_run_query(triplestore_t* t, query_t* query, struct command_ctx_s* ctx) {
 	if (ctx->verbose) {
 		fprintf(stderr, "Matching Query:\n");
 		triplestore_print_query(t, query, stderr);
@@ -297,7 +297,7 @@ query_t* construct_bgp_query(triplestore_t* t, struct command_ctx_s* ctx, int ar
 
 #pragma mark -
 
-static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rdf_term_type_t* type, const char** value, size_t* value_len, int* needs_free, const char** datatype, size_t* datatype_len, const char** language, size_t* language_len) {
+static int _parse_term(const char* ts, int escape, rdf_term_type_t* type, const char** value, size_t* value_len, int* needs_free, const char** datatype, size_t* datatype_len, const char** language, size_t* language_len) {
 	// TODO: unescape newlines in *value
 	if (ts[0] == '<') {
 		char* p	= strstr(ts, ">");
@@ -367,7 +367,7 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rd
 
 		*needs_free		= 0;
 		if (escape) {
-			for (int i = 1; i < *value_len; i++) {
+			for (size_t i = 1; i < *value_len; i++) {
 				if ((*value)[i-1] == '\\' && (*value)[i] == 'n') {
 					*needs_free	= 1;
 					break;
@@ -381,7 +381,7 @@ static int _parse_term(struct command_ctx_s* ctx, const char* ts, int escape, rd
 				const char* orig	= *value;
 				char* new	= calloc(1, 1+*value_len);
 				char* p		= new;
-				for (int i = 0; i < *value_len; i++) {
+				for (size_t i = 0; i < *value_len; i++) {
 					if (orig[i] == '\\') {
 						if (i == (*value_len-1)) {
 							free(new);
@@ -436,7 +436,7 @@ int64_t query_node_id(triplestore_t* t, struct command_ctx_s* ctx, query_t* quer
 
 // 	fprintf(stderr, ">>> Term: %s\n", ts);
 	static const int escape	= 1;
-	if (_parse_term(ctx, ts, escape, &type, &value, &value_len, &value_needs_free, &datatype, &datatype_len, &language, &language_len)) {
+	if (_parse_term(ts, escape, &type, &value, &value_len, &value_needs_free, &datatype, &datatype_len, &language, &language_len)) {
 		return 0;
 	}
 	
@@ -600,7 +600,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		ctx->query	= NULL;
 		ctx->constructing	= 0;
 		if (query) {
-			_triplestore_run_query(t, query, ctx, f);
+			_triplestore_run_query(t, query, ctx);
 			triplestore_free_query(query);
 		} else {
 			fprintf(stderr, "No query available\n");
@@ -629,7 +629,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			return 0;
 		}
 		
-		_triplestore_run_query(t, query, ctx, f);
+		_triplestore_run_query(t, query, ctx);
 		triplestore_free_query(query);
 	} else if (!strcmp(op, "path")) {
 		int64_t var	= -1;
@@ -669,7 +669,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			return 0;
 		}
 
-		_triplestore_run_query(t, query, ctx, f);
+		_triplestore_run_query(t, query, ctx);
 		triplestore_free_query(query);
 	} else if (!strcmp(op, "unique")) {
 		if (ctx->constructing == 0) {
@@ -803,7 +803,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			if (!strncmp(op, "re", 2)) {
 				escape	= 0;
 			}
-			if (_parse_term(ctx, ts, escape, &type, &value, &value_len, &value_needs_free, &datatype, &datatype_len, &language, &language_len)) {
+			if (_parse_term(ts, escape, &type, &value, &value_len, &value_needs_free, &datatype, &datatype_len, &language, &language_len)) {
 				ctx->set_error(-1, "Failed to parse FILTER value");
 				return 1;
 			}
@@ -863,7 +863,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		
 		triplestore_query_add_op(query, QUERY_FILTER, filter);
-		_triplestore_run_query(t, query, ctx, f);
+		_triplestore_run_query(t, query, ctx);
 		triplestore_free_query(query);
 	} else if (!strcmp(op, "match")) {
 		const char* pattern	= argv[++i];
@@ -1017,10 +1017,13 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 		double start	= triplestore_current_time();
 		__block int count	= 0;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 		triplestore_query_match(t, query, -1, ^(binding_t* final_match){
 			count++;
 			return 0;
 		});
+#pragma clang diagnostic pop
 		if (ctx->verbose) {
 			double elapsed	= triplestore_elapsed_time(start);
 			fprintf(stderr, "%lfs elapsed during matching of %"PRIu32" results\n", elapsed, count);

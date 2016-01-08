@@ -95,7 +95,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 	rdf_term_t* term	= (rdf_term_t*) v;
 	term->value			= v + sizeof(rdf_term_t);
 	term->type			= type;
-	term->is_numeric	= 0;
+	term->vtype.value_type.is_numeric	= 0;
 	strncpy(term->value, _value, value_len);
 	
 	if (_vtype) {
@@ -123,13 +123,13 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 			return NULL;
 		}
 		
-		term->vtype.value_type	= 0;
+		term->vtype.value_lang	= 0;
 
 		// Normalize the case of the language and any region/script
 		const char* lang	= _parse_results(rc, 1, _vtype, ovector, NULL);
 		const char* region	= _parse_results(rc, 2, _vtype, ovector, NULL);
 		const char* script	= _parse_results(rc, 3, _vtype, ovector, NULL);
-		char* ptr	= (char*) &(term->vtype.value_type);
+		char* ptr	= (char*) &(term->vtype.value_lang);
 		
 		// language is all lowercase
 		*(ptr++)	= tolower(lang[0]);
@@ -148,7 +148,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 			*(ptr++)	= tolower(script[3]);
 		}
 	} else {
-		term->vtype.value_id	= vid;
+		term->vtype.value_type.value_id	= vid;
 		if (type == TERM_BLANK) {
 			if (vid > t->bnode_prefix) {
 				t->bnode_prefix = vid;
@@ -170,8 +170,8 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 								return NULL;
 							}
 						}
-						term->is_numeric	= 1;
-						term->numeric_value = (double) atoll(term->value);
+						term->vtype.value_type.is_numeric	= 1;
+						term->vtype.value_type.numeric_value = (double) atoll(term->value);
 					} else if (!strcmp(type, "decimal")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->decimal_re)) {
@@ -180,8 +180,8 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 								return NULL;
 							}
 						}
-						term->is_numeric	= 1;
-						term->numeric_value = (double) atof(term->value);
+						term->vtype.value_type.is_numeric	= 1;
+						term->vtype.value_type.numeric_value = (double) atof(term->value);
 					} else if (!strcmp(type, "float") || !strcmp(type, "double")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->float_re)) {
@@ -195,8 +195,8 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 //						fprintf(stderr, "typed literal: %s\n", ss);
 //						free(ss);
 
-						term->is_numeric	= 1;
-						term->numeric_value = (double) atof(term->value);
+						term->vtype.value_type.is_numeric	= 1;
+						term->vtype.value_type.numeric_value = (double) atof(term->value);
 					} else if (!strcmp(type, "dateTime")) {
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->datetime_re)) {
@@ -217,8 +217,8 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 				}
 			}
 			
-//			if (term->is_numeric) {
-//				fprintf(stderr, ">>> Numeric literal: %lf\n", term->numeric_value);
+//			if (term->vtype.value_type.is_numeric) {
+//				fprintf(stderr, ">>> Numeric literal: %lf\n", term->vtype.value_type.numeric_value);
 //			}
 //			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
 //				sprintf(string, "%s", t->value);
@@ -243,7 +243,7 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 
 void free_rdf_term(rdf_term_t* t) {
 //	if (t->type == TERM_LANG_LITERAL) {
-//		free(t->vtype.value_type);
+//		free(t->vtype.value_lang);
 //	}
 
 	// t is the head of the single memory block for both the term struct and the string payload
@@ -260,18 +260,18 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	if (b == NULL) return 1;
 	if (a->type == b->type) {
 		if (a->type == TERM_LANG_LITERAL) {
-			int64_t alang	= a->vtype.value_type;
-			int64_t blang	= b->vtype.value_type;
+			int64_t alang	= a->vtype.value_lang;
+			int64_t blang	= b->vtype.value_lang;
 			if (alang != blang) {
 				return (int) (alang - blang);
 			}
 		} else if (a->type == TERM_TYPED_LITERAL) {
-			if (a->vtype.value_id != b->vtype.value_id) {
-				return (int) (a->vtype.value_id - b->vtype.value_id);
+			if (a->vtype.value_type.value_id != b->vtype.value_type.value_id) {
+				return (int) (a->vtype.value_type.value_id - b->vtype.value_type.value_id);
 			}
 		} else if (a->type == TERM_BLANK) {
-			if (a->vtype.value_id != b->vtype.value_id) {
-				return (int) (a->vtype.value_id - b->vtype.value_id);
+			if (a->vtype.value_type.value_id != b->vtype.value_type.value_id) {
+				return (int) (a->vtype.value_type.value_id - b->vtype.value_type.value_id);
 			}
 		}
 		
@@ -296,7 +296,7 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 			break;
 		case TERM_BLANK:
 			string	= calloc(12+strlen(t->value), 1);
-			sprintf(string, "_:b%"PRIu32"b%s", (uint32_t) t->vtype.value_id, t->value);
+			sprintf(string, "_:b%"PRIu32"b%s", (uint32_t) t->vtype.value_type.value_id, t->value);
 			break;
 		case TERM_XSDSTRING_LITERAL:
 			string	= calloc(3+strlen(t->value), 1);
@@ -305,13 +305,13 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 			break;
 		case TERM_LANG_LITERAL:
 			// TODO: handle escaping
-			string	= calloc(4+strlen(t->value)+strlen((char*) &(t->vtype.value_type)), 1);
-			sprintf(string, "\"%s\"@%s", t->value, (char*) &(t->vtype.value_type));
+			string	= calloc(4+strlen(t->value)+strlen((char*) &(t->vtype.value_lang)), 1);
+			sprintf(string, "\"%s\"@%s", t->value, (char*) &(t->vtype.value_lang));
 			break;
 		case TERM_TYPED_LITERAL:
 			// TODO: handle escaping
 			
-			extra	= triplestore_term_to_string(store, store->graph[ t->vtype.value_id ]._term);
+			extra	= triplestore_term_to_string(store, store->graph[ t->vtype.value_type.value_id ]._term);
 			
 			string	= calloc(7+strlen(t->value)+strlen(extra), 1);
 			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
@@ -339,6 +339,8 @@ char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
 
 #pragma mark -
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 static int _hx_node_cmp_str ( const void* a, const void* b, void* param ) {
 	hx_nodemap_item* ia = (hx_nodemap_item*) a;
 	hx_nodemap_item* ib = (hx_nodemap_item*) b;
@@ -354,6 +356,7 @@ static void _hx_free_node_item (void *avl_item, void *avl_param) {
 	}
 	free( i );
 }
+#pragma clang diagnostic pop
 
 #pragma mark -
 #pragma mark Triplestore
@@ -471,11 +474,11 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	uint32_t type	= (uint32_t) term->type;
 	uint32_t extra_int	= 0;
 	if (type == TERM_LANG_LITERAL) {
-		extra_int	= (int) strlen((char*) &(term->vtype.value_type));
+		extra_int	= (int) strlen((char*) &(term->vtype.value_lang));
 	} else if (type == TERM_TYPED_LITERAL) {
-		extra_int	= (int) term->vtype.value_id;
+		extra_int	= (int) term->vtype.value_type.value_id;
 	} else if (type == TERM_BLANK) {
-		extra_int	= (int) term->vtype.value_id;
+		extra_int	= (int) term->vtype.value_type.value_id;
 	}
 	
 	char buffer[12];
@@ -486,7 +489,7 @@ static int _writeterm(int fd, rdf_term_t* term) {
 	write(fd, buffer, 12);
 	write(fd, term->value, 1+vlen);
 	if (type == TERM_LANG_LITERAL) {
-		write(fd, &(term->vtype.value_type), 1+extra_int);
+		write(fd, &(term->vtype.value_lang), 1+extra_int);
 	}
 	return 0;
 }
@@ -499,10 +502,10 @@ static rdf_term_t* _readterm(triplestore_t* t, char* buffer, int* length) {
 	char* value				= buffer+l;
 	l	+= vlen+1;
 	
-	char* value_type		= NULL;
+	char* value_lang		= NULL;
 	uint32_t value_id		= 0;
 	if (type == TERM_LANG_LITERAL) {
-		value_type	= buffer+l;
+		value_lang	= buffer+l;
 		l	+= extra_int+1;
 	} else if (type == TERM_TYPED_LITERAL) {
 		value_id	= extra_int;
@@ -511,7 +514,7 @@ static rdf_term_t* _readterm(triplestore_t* t, char* buffer, int* length) {
 	}
 	
 	*length = l;
-	return triplestore_new_term(t, type, value, value_type, value_id);
+	return triplestore_new_term(t, type, value, value_lang, value_id);
 }
 
 int _triplestore_dump_edge(int fd, index_list_element_t* edge) {
@@ -537,7 +540,7 @@ int _triplestore_dump_node(int fd, graph_node_t* node) {
 	return 0;
 }
 
-int _triplestore_load_node(triplestore_t* t, char* buffer, int i, graph_node_t* node) {
+static int _triplestore_load_node(triplestore_t* t, char* buffer, graph_node_t* node) {
 	node->mtime			= *((uint64_t*) &(buffer[0]));
 	node->out_degree	= ntohl(*((uint32_t*) &(buffer[8])));
 	node->in_degree		= ntohl(*((uint32_t*) &(buffer[12])));
@@ -631,7 +634,7 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	t->graph				= calloc(sizeof(graph_node_t), 1+nalloc);
 	for (uint32_t i = 1; i <= nodes; i++) {
 		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
-		int length	= _triplestore_load_node(t, mp, i, &(t->graph[i]));
+		int length	= _triplestore_load_node(t, mp, &(t->graph[i]));
 		item->_term = t->graph[i]._term;
 		item->id	= i;
 		avl_insert( t->dictionary, item );
@@ -728,6 +731,10 @@ struct _sort_s {
 //	fprintf(stderr, "\n");
 // }
 
+static int triplestore_term_is_numeric(rdf_term_t* term) {
+	return (term->type == TERM_TYPED_LITERAL && term->vtype.value_type.is_numeric);
+}
+
 #ifdef __APPLE__
 int _table_row_cmp(void* thunk, const void* a, const void* b) {
 #else
@@ -747,7 +754,7 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 	binding_t* ap		= (binding_t*) a;
 	binding_t* bp		= (binding_t*) b;
 	
-	for (int i = 0; i < width; i++) {
+	for (uint32_t i = 0; i < width; i++) {
 		int64_t slot	= -(sort->vars[i]);
 		binding_t aid	= ap[slot];
 		binding_t bid	= bp[slot];
@@ -762,9 +769,12 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 		rdf_term_t* aterm	= t->graph[aid]._term;
 		rdf_term_t* bterm	= t->graph[bid]._term;
 		
-		if (aterm->is_numeric && bterm->is_numeric) {
-			double av	= aterm->numeric_value;
-			double bv	= bterm->numeric_value;
+		int a_is_numeric	= triplestore_term_is_numeric(aterm);
+		int b_is_numeric	= triplestore_term_is_numeric(bterm);
+		
+		if (a_is_numeric && b_is_numeric) {
+			double av	= aterm->vtype.value_type.numeric_value;
+			double bv	= bterm->vtype.value_type.numeric_value;
 			if (av == bv) {
 				continue;
 			} else if (av < bv) {
@@ -772,9 +782,9 @@ int _table_row_cmp(const void* a, const void* b, void* thunk) {
 			} else {
 				return 1;
 			}
-		} else if (aterm->is_numeric) {
+		} else if (a_is_numeric) {
 			return 1;
-		} else if (bterm->is_numeric) {
+		} else if (b_is_numeric) {
 			return -1;
 		}
 		
@@ -898,13 +908,13 @@ int _filter_args_are_term_compatible(query_filter_t* filter, rdf_term_t* term) {
 		return (term->type == TERM_XSDSTRING_LITERAL);
 	} else if (filter->string2_type == TERM_LANG_LITERAL && term->type == TERM_LANG_LITERAL) {
 		char* filter_lang	= filter->string2_lang;
-		char* term_lang		= (char*) &(term->vtype.value_type);
+		char* term_lang		= (char*) &(term->vtype.value_lang);
 		return !strcmp(filter_lang, term_lang);
 	}
 	return 0;
 }
 
-int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* filter, binding_t* current_match, int(^block)(binding_t* final_match)) {
+int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	int64_t node1;
 	int64_t node2;
 	int rc;
@@ -930,7 +940,7 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 			}
 			break;
 		case FILTER_ISNUMERIC:
-			if (!(t->graph[ current_match[-(filter->node1)] ]._term->is_numeric)) {
+			if (!triplestore_term_is_numeric(t->graph[ current_match[-(filter->node1)] ]._term)) {
 				return 0;
 			}
 			break;
@@ -1021,12 +1031,15 @@ int _triplestore_filter_match(triplestore_t* t, query_t* query, query_filter_t* 
 #pragma mark -
 #pragma mark BGPs
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples) {
 	bgp_t* bgp		= calloc(sizeof(bgp_t), 1);
 	bgp->triples	= triples;
 	bgp->nodes		= calloc(sizeof(int64_t), 3 * triples);
 	return bgp;
 }
+#pragma clang diagnostic pop
 
 int triplestore_free_bgp(bgp_t* bgp) {
 	free(bgp->nodes);
@@ -1128,12 +1141,15 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^bloc
 #pragma mark -
 #pragma mark Projection
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 project_t* triplestore_new_project(triplestore_t* t, int variables) {
 	project_t* project	= calloc(sizeof(project_t), 1);
 	project->size	= variables;
 	project->keep	= calloc(1, 1+variables);
 	return project;
 }
+#pragma clang diagnostic pop
 
 int triplestore_free_project(project_t* project) {
 	free(project->keep);
@@ -1146,12 +1162,12 @@ int triplestore_set_projection(project_t* project, int64_t var) {
 	return 0;
 }
 
-int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, binding_t* current_match, int(^block)(binding_t* final_match)) {
+static int _triplestore_project(query_t* query, project_t* project, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	int vars	= triplestore_query_get_max_variables(query);
 	int psize	= project->size;
 // 	fprintf(stderr, "%d %d\n", vars, psize);
 	for (int i = 1; i <= vars; i++) {
-		const char* var	= query->variable_names[i];
+// 		const char* var	= query->variable_names[i];
 		if (i <= vars && i <= psize && project->keep[i] != 0) {
 // 			fprintf(stderr, "Keep %d ?%s\n", i, var);
 		} else {
@@ -1166,6 +1182,8 @@ int _triplestore_project(triplestore_t* t, query_t* query, project_t* project, b
 #pragma mark -
 #pragma mark Sorting
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, int unique) {
 	sort_t* sort	= calloc(sizeof(sort_t), 1);
 	sort->size		= variables;
@@ -1174,6 +1192,7 @@ sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, 
 	sort->table		= triplestore_new_table(result_width);
 	return sort;
 }
+#pragma clang diagnostic pop
 
 int triplestore_free_sort(sort_t* sort) {
 	triplestore_free_table(sort->table);
@@ -1187,7 +1206,7 @@ int triplestore_set_sort(sort_t* sort, int rank, int64_t var) {
 	return 0;
 }
 
-int _triplestore_sort_fill(triplestore_t* t, query_t* query, sort_t* sort, binding_t* current_match) {
+static int _triplestore_sort_fill(sort_t* sort, binding_t* current_match) {
 	return triplestore_table_add_row(sort->table, current_match);
 }
 
@@ -1195,6 +1214,8 @@ int _triplestore_sort_fill(triplestore_t* t, query_t* query, sort_t* sort, bindi
 #pragma mark -
 #pragma mark Paths
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end) {
 	path_t* path	= calloc(sizeof(path_t), 1);
 	path->type	= type;
@@ -1203,6 +1224,7 @@ path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, 
 	path->pred	= pred;
 	return path;
 }
+#pragma clang diagnostic pop
 
 int triplestore_free_path(path_t* path) {
 	free(path);
@@ -1218,6 +1240,8 @@ int _triplestore_path_step(triplestore_t* t, nodeid_t s, nodeid_t pred, char* se
 	
 //	__indent(stderr, depth);
 //	fprintf(stderr, "matching triple %"PRId64" %"PRIu32" 0\n", s, path->pred);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 	int r	= triplestore_match_triple(t, s, pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 		if (seen[_o]) {
 			return 0;
@@ -1234,6 +1258,7 @@ int _triplestore_path_step(triplestore_t* t, nodeid_t s, nodeid_t pred, char* se
 			return r;
 		}
 	});
+#pragma clang diagnostic pop
 	return r;
 }
 
@@ -1259,6 +1284,8 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 		if (start <= 0) {
 //			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
 			char* starts	= calloc(1, t->nodes_used);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 			r	= triplestore_match_triple(t, start, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
 				if (starts[_s]++) {
 					return 0;
@@ -1277,6 +1304,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 					return block(current_match);
 				});
 			});
+#pragma clang diagnostic pop
 			free(starts);
 		} else {
 			r	= _triplestore_path_step(t, (nodeid_t)start, path->pred, seen, 0, ^(nodeid_t reached) {
@@ -1311,6 +1339,8 @@ int triplestore_query_set_max_variables(query_t* query, int max) {
 	return 0;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 query_t* triplestore_new_query(triplestore_t* t, int variables) {
 	query_t* query			= calloc(sizeof(query_t), 1);
 // 	fprintf(stderr, "new query %p\n", query);
@@ -1318,6 +1348,7 @@ query_t* triplestore_new_query(triplestore_t* t, int variables) {
 	query->variable_names	= calloc(sizeof(char*), variables+1);
 	return query;
 }
+#pragma clang diagnostic pop
 
 int triplestore_free_query_op(query_op_t* op) {
 	if (op->next) {
@@ -1436,7 +1467,7 @@ int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
 	return 0;
 }
 
-int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op, binding_t* current_match, int(^block)(binding_t* final_match)) {
+static int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op, binding_t* current_match, int(^block)(binding_t* final_match)) {
 	if (op) {
 		switch (op->type) {
 			case QUERY_BGP:
@@ -1444,11 +1475,11 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_FILTER:
-				return _triplestore_filter_match(t, query, op->ptr, current_match, ^(binding_t* final_match){
+				return _triplestore_filter_match(t, op->ptr, current_match, ^(binding_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_PROJECT:
-				return _triplestore_project(t, query, op->ptr, current_match, ^(binding_t* final_match){
+				return _triplestore_project(query, op->ptr, current_match, ^(binding_t* final_match){
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_PATH:
@@ -1456,7 +1487,7 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 					return _triplestore_query_op_match(t, query, op->next, final_match, block);
 				});
 			case QUERY_SORT:
-				return _triplestore_sort_fill(t, query, op->ptr, current_match);
+				return _triplestore_sort_fill(op->ptr, current_match);
 			default:
 				fprintf(stderr, "Unrecognized query op in _triplestore_query_op_match: %d\n", op->type);
 				return 1;
@@ -1466,6 +1497,8 @@ int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_op_t* op
 	}
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(binding_t* final_match)) {
 // 	triplestore_print_query(t, query, stderr);
 	binding_t* current_match = calloc(sizeof(binding_t), 1+triplestore_query_get_max_variables(query));
@@ -1507,6 +1540,7 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 	
 	return r;
 }
+#pragma clang diagnostic pop
 
 #pragma mark -
 
@@ -1703,6 +1737,8 @@ int triplestore__load_file(triplestore_t* t, const char* filename, int verbose) 
 #pragma mark -
 
 int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _o, int(^block)(triplestore_t* t, nodeid_t s, nodeid_t p, nodeid_t o)) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 	int(^repeated_vars_ok)(nodeid_t s, nodeid_t p, nodeid_t o)	= ^(nodeid_t s, nodeid_t p, nodeid_t o){ return 1; };
 	
 	if (_s > 0) {
@@ -1790,6 +1826,7 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 		}
 		return 0;
 	}
+#pragma clang diagnostic pop
 	return 0;
 }
 
@@ -1816,7 +1853,7 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 // 		case TERM_BLANK:
 // 			write(fd, "_:", 2);
 // 			write(fd, term->value, strlen(term->value));
-// 			snprintf(buffer, 32, "%"PRIu32"b%s", (uint32_t) term->vtype.value_id, term->value);
+// 			snprintf(buffer, 32, "%"PRIu32"b%s", (uint32_t) term->vtype.value_type.value_id, term->value);
 // 			write(fd, buffer, strlen(buffer));
 // 			break;
 // 		case TERM_XSDSTRING_LITERAL:
@@ -1830,11 +1867,11 @@ int triplestore_match_triple(triplestore_t* t, int64_t _s, int64_t _p, int64_t _
 // 			write(fd, "\"", 1);
 // 			write(fd, term->value, strlen(term->value));
 // 			write(fd, "\"@", 2);
-// 			write(fd, (char*) &(term->vtype.value_type), strlen((char*) &(term->vtype.value_type)));
+// 			write(fd, (char*) &(term->vtype.value_lang), strlen((char*) &(term->vtype.value_lang)));
 // 			break;
 // 		case TERM_TYPED_LITERAL:
 // 			// TODO: handle escaping
-// 			dt		= t->graph[ term->vtype.value_id ]._term;
+// 			dt		= t->graph[ term->vtype.value_type.value_id ]._term;
 // 			if (strcmp(dt->value, "http://www.w3.org/2001/XMLSchema#string")) {
 // 				write(fd, "\"", 1);
 // 				write(fd, term->value, strlen(term->value));
@@ -1890,6 +1927,7 @@ static void _print_term_or_variable(triplestore_t* t, int variables, char** vari
 	if (s == 0) {
 		fprintf(f, "[]");
 	} else if (s < 0) {
+		assert(-s < variables);
 		fprintf(f, "?%s", variable_names[-s]);
 	} else {
 		triplestore_print_term(t, (nodeid_t)s, f, 0);
@@ -1906,6 +1944,8 @@ void triplestore_print_path(triplestore_t* t, query_t* query, path_t* path, FILE
 	fprintf(f, "\n");
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 void triplestore_print_project(triplestore_t* t, query_t* query, project_t* project, FILE* f) {
 	fprintf(f, "Project:\n");
 	for (int i = 0; i <= project->size; i++) {
@@ -1922,6 +1962,7 @@ void triplestore_print_sort(triplestore_t* t, query_t* query, sort_t* sort, FILE
 		fprintf(f, "  - ?%s\n", query->variable_names[-var]);
 	}
 }
+#pragma clang diagnostic pop
 
 void triplestore_print_filter(triplestore_t* t, query_t* query, query_filter_t* filter, FILE* f) {
 	fprintf(f, "Filter: ");
