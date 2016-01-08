@@ -206,8 +206,7 @@ handle_new_triple_object (triplestore_t* t, SV* closure, rdf_term_t* subject, rd
 	SvREFCNT_dec(p);
 	SvREFCNT_dec(o);
 	
-// 	fprintf(stderr, "Parsed: %p %p %p\n", triple->subject, triple->predicate, triple->object);
-	call_handler_cb(aTHX_ closure, 1, t);
+	call_handler_cb(aTHX_ closure, 1, triple);
 	SvREFCNT_dec(triple);
 	return;
 }
