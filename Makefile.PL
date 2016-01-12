@@ -36,7 +36,7 @@ my %WriteMakefileArgs	= (
     	'File::Temp'				=> 0,
     	'Test::Roo'					=> 0,
     	'Test::Exception'			=> 0,
-    	'Test::More'				=> 0,
+    	'Test::Modern'				=> 0,
     },
     CC								=> 'clang',
     $deps->get_makefile_vars,
@@ -47,7 +47,7 @@ $WriteMakefileArgs{depend}{'MemoryTripleStore.xs'} = "avl.o triplestore.o";
 $WriteMakefileArgs{depend}{'triplestore.c'} = "triplestore.h avl.h avl.c";
 $WriteMakefileArgs{depend}{'avl.c'} = "avl.h";
 
-my @CCFLAGS	= ('-g', '-fblocks');
+my @CCFLAGS	= ('-g', '-fblocks', '-march=native', '-flto');
 
 $WriteMakefileArgs{CCFLAGS}	.= join(' ', '', @CCFLAGS);
 
