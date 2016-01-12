@@ -1,5 +1,5 @@
 use Test::Roo;
-use Test::More;
+use Test::Modern;
 use Test::Exception;
 use File::Temp qw(tempfile);
 
@@ -41,58 +41,63 @@ sub _store_with_data {
 
 with 'Test::Attean::TripleStore';
 
-test 'match_bgp' => sub {
+test '1-triple' => sub {
 	my $self	= shift;
 	my $store	= $self->_store_with_data();
-
-	{
-		note('1-triple BGP');
-		my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://example.org/p'), variable('o1'));
+	my $t1		= Attean::TriplePattern->new(variable('s'), iri('http://example.org/p'), variable('o1'));
+	subtest 'get_triples' => sub {
+		my $iter	= $store->get_triples($t1->values);
+		my @r		= $iter->elements;
+		is(scalar(@r), 5, 'expected 1-triple result size');
+		foreach my $r (@r) {
+			does_ok($r, 'Attean::API::Triple');
+			my $s	= $r->subject;
+			like($s->value, qr<^http://example.org/[sz]$>, 'expected BGP match IRI value');
+		}
+	};
+	
+	subtest 'match_bgp' => sub {
 		my $iter	= $store->match_bgp($t1);
 		my @r		= $iter->elements;
-		is(scalar(@r), 5, 'expected 1-triple BGP result size');
+		is(scalar(@r), 5, 'expected 1-triple result size');
 		foreach my $r (@r) {
+			does_ok($r, 'Attean::API::Result');
 			my $s	= $r->value('s');
 			like($s->value, qr<^http://example.org/[sz]$>, 'expected BGP match IRI value');
 		}
+	};
+};
+
+test '2-triple BGP with IRI endpoint' => sub {
+	my $self	= shift;
+	my $store	= $self->_store_with_data();
+	my $t1		= Attean::TriplePattern->new(iri('http://example.org/x'), variable('p1'), variable('o'));
+	my $t2		= Attean::TriplePattern->new(variable('o'), variable('p2'), variable('end'));
+	my $iter	= $store->match_bgp($t1, $t2);
+	my @r		= $iter->elements;
+	is(scalar(@r), 4, 'expected 2-triple BGP result size');
+	foreach my $r (@r) {
+		my $end		= $r->value('end');
+		like($end->value, qr<^(1|10|20|50)$>, 'expected BGP match literal value');
 	}
-	
-	{
-		note('2-triple BGP with IRI endpoint');
-		my $t1		= Attean::TriplePattern->new(iri('http://example.org/x'), variable('p1'), variable('o'));
-		my $t2		= Attean::TriplePattern->new(variable('o'), variable('p2'), variable('end'));
-		my $iter	= $store->match_bgp($t1, $t2);
-		my @r		= $iter->elements;
-		is(scalar(@r), 4, 'expected 2-triple BGP result size');
-		foreach my $r (@r) {
-			my $end		= $r->value('end');
-			like($end->value, qr<^(1|10|20|50)$>, 'expected BGP match literal value');
-		}
-	}
-	
-	{
-		note('2-triple BGP with variable endpoints');
-		my $t1		= Attean::TriplePattern->new(variable('start'), variable('p1'), variable('o'));
-		my $t2		= Attean::TriplePattern->new(variable('o'), variable('p2'), variable('end'));
-		my $iter	= $store->match_bgp($t1, $t2);
-		my @r		= $iter->elements;
-		is(scalar(@r), 4, 'expected 2-triple BGP result size');
-		foreach my $r (@r) {
-			my $start	= $r->value('start');
-			my $end		= $r->value('end');
-			is($start->value, 'http://example.org/x');
-			like($end->value, qr<^(1|10|20|50)$>, 'expected BGP match literal value');
-		}
+};
+
+test '2-triple BGP with variable endpoints' => sub {
+	my $self	= shift;
+	my $store	= $self->_store_with_data();
+	my $t1		= Attean::TriplePattern->new(variable('start'), variable('p1'), variable('o'));
+	my $t2		= Attean::TriplePattern->new(variable('o'), variable('p2'), variable('end'));
+	my $iter	= $store->match_bgp($t1, $t2);
+	my @r		= $iter->elements;
+	is(scalar(@r), 4, 'expected 2-triple BGP result size');
+	foreach my $r (@r) {
+		my $start	= $r->value('start');
+		my $end		= $r->value('end');
+		is($start->value, 'http://example.org/x');
+		like($end->value, qr<^(1|10|20|50)$>, 'expected BGP match literal value');
 	}
 };
 
 run_me; # run these Test::Attean tests
 
 done_testing();
-
-
-sub does_ok {
-    my ($class_or_obj, $does, $message) = @_;
-    $message ||= "The object does $does";
-    ok(eval { $class_or_obj->does($does) }, $message);
-}
