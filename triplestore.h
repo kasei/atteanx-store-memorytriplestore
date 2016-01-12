@@ -171,6 +171,7 @@ rdf_term_t* triplestore_get_term(triplestore_t* t, nodeid_t id);
 void free_rdf_term(rdf_term_t* t);
 int triplestore_size(triplestore_t* t);
 
+int triplestore_term_get_value(rdf_term_t* t, int(^block)(size_t, const char*));
 char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t);
 triplestore_t* new_triplestore(int max_nodes, int max_edges);
 int free_triplestore(triplestore_t* t);

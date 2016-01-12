@@ -103,11 +103,11 @@ static SV*
 rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 	SV* object;
 	SV* class;
-	SV* string;
+	__block SV* string;
 	char* dtvalue;
 	SV* dt;
 	SV* lang;
-	SV* value;
+	__block SV* value;
 	SV* value_key;
 	SV* lang_key;
 	SV* dt_key;
@@ -134,7 +134,10 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			dt_key		= newSVpvs("datatype");
 			value_key	= newSVpvs("value");
 			class	= newSVpvs("Attean::Literal");
-			string	= newSVpv((const char*) term->value, 0);
+			triplestore_term_get_value(term, ^(size_t len, const char* value) {
+				string	= newSVpv(value, len);
+				return 0;
+			});
 			object	= new_node_instance(aTHX_ class, 4, value_key, string, dt_key, dt);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(dt);
@@ -145,7 +148,10 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			lang_key		= newSVpvs("language");
 			value_key	= newSVpvs("value");
 			class	= newSVpvs("Attean::Literal");
-			string	= newSVpv((const char*) term->value, 0);
+			triplestore_term_get_value(term, ^(size_t len, const char* value) {
+				string	= newSVpv(value, len);
+				return 0;
+			});
 			lang	= newSVpv((const char*) &(term->vtype.value_lang), 0);
 			object	= new_node_instance(aTHX_ class, 4, value_key, string, lang_key, lang);
 			SvREFCNT_dec(string);
@@ -155,8 +161,10 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			return object;
 		case TERM_TYPED_LITERAL:
 			class		= newSVpvs("Attean::IRI");
-			dtvalue		= t->graph[ term->vtype.value_type.value_id ]._term->value;
-			value		= newSVpv(dtvalue, strlen(dtvalue));
+			triplestore_term_get_value(t->graph[ term->vtype.value_type.value_id ]._term, ^(size_t len, const char* v) {
+				value	= newSVpv(v, len);
+				return 0;
+			});
 			dt			= new_node_instance(aTHX_ class, 1, value);
 			SvREFCNT_dec(value);
 			SvREFCNT_dec(class);
@@ -164,7 +172,10 @@ rdf_term_to_object(triplestore_t* t, rdf_term_t* term) {
 			dt_key		= newSVpvs("datatype");
 			value_key	= newSVpvs("value");
 			class		= newSVpvs("Attean::Literal");
-			string		= newSVpv((const char*) term->value, 0);
+			triplestore_term_get_value(term, ^(size_t len, const char* value) {
+				string	= newSVpv(value, len);
+				return 0;
+			});
 			object		= new_node_instance(aTHX_ class, 4, value_key, string, dt_key, dt);
 			SvREFCNT_dec(string);
 			SvREFCNT_dec(dt);
@@ -548,9 +559,15 @@ MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripl
 
 SV*
 rdf_term_iri_value (rdf_term_t* term)
+	INIT:
+		__block SV* r;
 	CODE:
 // 		fprintf(stderr, "rdf_term_iri_value called\n");
-		RETVAL = newSVpv((const char*) term->value, 0);
+		triplestore_term_get_value(term, ^(size_t len, const char* value){
+			r = newSVpv(value, len);
+			return 0;
+		});
+		RETVAL = r;
 	OUTPUT:
 		RETVAL
 
@@ -558,9 +575,15 @@ MODULE = AtteanX::Store::MemoryTripleStore PACKAGE = AtteanX::Store::MemoryTripl
 
 SV*
 rdf_term_blank_value (rdf_term_t* term)
+	INIT:
+		__block SV* r;
 	CODE:
 // 		fprintf(stderr, "rdf_term_blank_value called\n");
-		RETVAL = newSVpv((const char*) term->value, 0);
+		triplestore_term_get_value(term, ^(size_t len, const char* value){
+			r = newSVpv(value, len);
+			return 0;
+		});
+		RETVAL = r;
 	OUTPUT:
 		RETVAL
 

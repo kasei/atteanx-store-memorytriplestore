@@ -277,7 +277,20 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 			}
 		}
 		
-		return strcmp(a->value, b->value);
+		return triplestore_term_get_value(a, ^(size_t alen, const char* avalue) {
+			return triplestore_term_get_value(b, ^(size_t blen, const char* bvalue) {
+				size_t len	= (alen < blen) ? alen : blen;
+				int r	= strncmp(avalue, bvalue, len);
+				if (r == 0) {
+					if (alen < blen) {
+						return -1;
+					} else if (alen > blen) {
+						return 1;
+					}
+				}
+				return r;
+			});
+		});
 	} else {
 		if (a->type < b->type) {
 			return -1;
@@ -288,52 +301,74 @@ int term_compare(rdf_term_t* a, rdf_term_t* b) {
 	return 0;
 }
 
+int triplestore_term_get_value(rdf_term_t* t, int(^block)(size_t, const char*)) {
+	size_t len	= strlen(t->value);
+	return block(len, t->value);
+}
+
 char* triplestore_term_to_string(triplestore_t* store, rdf_term_t* t) {
-	char* string	= NULL;
-	char* extra		= NULL;
+	__block char* string	= NULL;
+	__block char* extra		= NULL;
 	switch (t->type) {
 		case TERM_IRI:
-			string	= calloc(3+strlen(t->value), 1);
-			sprintf(string, "<%s>", t->value);
+			triplestore_term_get_value(t, ^(size_t len, const char* value){
+				string	= calloc(3+len, 1);
+				sprintf(string, "<%s>", value);
+				return 0;
+			});
 			break;
 		case TERM_BLANK:
-			string	= calloc(12+strlen(t->value), 1);
-			sprintf(string, "_:b%"PRIu32"b%s", (uint32_t) t->vtype.value_type.value_id, t->value);
+			triplestore_term_get_value(t, ^(size_t len, const char* value){
+				string	= calloc(12+len, 1);
+				sprintf(string, "_:b%"PRIu32"b%s", (uint32_t) t->vtype.value_type.value_id, value);
+				return 0;
+			});
 			break;
 		case TERM_XSDSTRING_LITERAL:
-			string	= calloc(3+strlen(t->value), 1);
-			// TODO: handle escaping
-			sprintf(string, "\"%s\"", t->value);
+			triplestore_term_get_value(t, ^(size_t len, const char* value){
+				string	= calloc(3+len, 1);
+				// TODO: handle escaping
+				sprintf(string, "\"%s\"", value);
+				return 0;
+			});
 			break;
 		case TERM_LANG_LITERAL:
-			// TODO: handle escaping
-			string	= calloc(4+strlen(t->value)+strlen((char*) &(t->vtype.value_lang)), 1);
-			sprintf(string, "\"%s\"@%s", t->value, (char*) &(t->vtype.value_lang));
+			triplestore_term_get_value(t, ^(size_t len, const char* value){
+				// TODO: handle escaping
+				string	= calloc(4+len+strlen((char*) &(t->vtype.value_lang)), 1);
+				sprintf(string, "\"%s\"@%s", value, (char*) &(t->vtype.value_lang));
+				return 0;
+			});
 			break;
 		case TERM_TYPED_LITERAL:
 			// TODO: handle escaping
-			
 			extra	= triplestore_term_to_string(store, store->graph[ t->vtype.value_type.value_id ]._term);
 			
-			string	= calloc(7+strlen(t->value)+strlen(extra), 1);
-			if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
-				sprintf(string, "%s", t->value);
-			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
-				sprintf(string, "%s", t->value);
-			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#float>")) {
-				sprintf(string, "%s", t->value);
-			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#double>")) {
-				sprintf(string, "%s", t->value);
-			} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#boolean>")) {
-				sprintf(string, "%s", t->value);
-			} else {
-				sprintf(string, "\"%s\"^^%s", t->value, extra);
-			}
+			triplestore_term_get_value(t, ^(size_t len, const char* value){
+				string	= calloc(7+len+strlen(extra), 1);
+				if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#decimal>")) {
+					sprintf(string, "%s", value);
+				} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#integer>")) {
+					sprintf(string, "%s", value);
+				} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#float>")) {
+					sprintf(string, "%s", value);
+				} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#double>")) {
+					sprintf(string, "%s", value);
+				} else if (!strcmp(extra, "<http://www.w3.org/2001/XMLSchema#boolean>")) {
+					sprintf(string, "%s", value);
+				} else {
+					sprintf(string, "\"%s\"^^%s", value, extra);
+				}
+				return 0;
+			});
 			free(extra);
 			break;
 		case TERM_VARIABLE:
-			string	= calloc(1, 1+strlen(t->value)+1);
-			sprintf(string, "?%s", t->value);
+			triplestore_term_get_value(t, ^(size_t len, const char* value){
+				string	= calloc(1, 1+len+1);
+				sprintf(string, "?%s", value);
+				return 0;
+			});
 			break;
 	}
 	return string;
@@ -483,16 +518,19 @@ static int _writeterm(int fd, rdf_term_t* term) {
 		extra_int	= (int) term->vtype.value_type.value_id;
 	}
 	
-	char buffer[12];
-	int vlen	= (int) strlen(term->value);
-	*((uint32_t*) &(buffer[0]))		= htonl(type);
-	*((uint32_t*) &(buffer[4]))		= htonl(extra_int);
-	*((uint32_t*) &(buffer[8]))		= htonl(vlen);
-	write(fd, buffer, 12);
-	write(fd, term->value, 1+vlen);
-	if (type == TERM_LANG_LITERAL) {
-		write(fd, &(term->vtype.value_lang), 1+extra_int);
-	}
+	triplestore_term_get_value(term, ^(size_t len, const char* value){
+		char buffer[12];
+		int vlen	= (int) len;
+		*((uint32_t*) &(buffer[0]))		= htonl(type);
+		*((uint32_t*) &(buffer[4]))		= htonl(extra_int);
+		*((uint32_t*) &(buffer[8]))		= htonl(vlen);
+		write(fd, buffer, 12);
+		write(fd, value, 1+vlen);
+		if (type == TERM_LANG_LITERAL) {
+			write(fd, &(term->vtype.value_lang), 1+extra_int);
+		}
+		return 0;
+	});
 	return 0;
 }
 
@@ -922,8 +960,6 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, binding_
 	int rc;
 	rdf_term_t* term;
 	nodeid_t tmpid;
-	int OVECCOUNT	= 30;
-	int ovector[OVECCOUNT];
 	switch (filter->type) {
 		case FILTER_ISIRI:
 			if (t->graph[ current_match[-(filter->node1)] ]._term->type != TERM_IRI) {
@@ -977,28 +1013,50 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, binding_
 				// all strings contain the empty pattern
 				break;
 			}
-			if (strlen(term->value) >= strlen(filter->string2)) {
-// 				fprintf(stderr, "'%s' ~~ '%s'\n", term->value, filter->string2);
-				if (strstr(term->value, filter->string2) != NULL) {
-					break;
+			
+			rc = triplestore_term_get_value(term, ^(size_t len, const char* value){
+				if (len >= strlen(filter->string2)) {
+// 					fprintf(stderr, "'%s' ~~ '%s'\n", value, filter->string2);
+					if (strstr(value, filter->string2) != NULL) {
+						return 1;
+					}
 				}
+				return 0;
+			});
+
+			if (rc) {
+				break;
 			}
 			return 0;
 		case FILTER_STRSTARTS:
 			term	= t->graph[ current_match[-(filter->node1)] ]._term;
-			if (strlen(term->value) >= strlen(filter->string2)) {
-				if (0 == strncmp(term->value, filter->string2, strlen(filter->string2))) {
-					break;
+			rc = triplestore_term_get_value(term, ^(size_t len, const char* value){
+				if (len >= strlen(filter->string2)) {
+					if (0 == strncmp(value, filter->string2, strlen(filter->string2))) {
+						return 1;
+					}
 				}
+				return 0;
+			});
+			
+			if (rc) {
+				break;
 			}
 			return 0;
 		case FILTER_STRENDS:
 			term	= t->graph[ current_match[-(filter->node1)] ]._term;
-			if (strlen(term->value) >= strlen(filter->string2)) {
-				const char* suffix	= term->value + strlen(term->value) - strlen(filter->string2);
-				if (0 == strcmp(suffix, filter->string2)) {
-					break;
+			rc = triplestore_term_get_value(term, ^(size_t len, const char* value){
+				if (len >= strlen(filter->string2)) {
+					const char* suffix	= value + len - strlen(filter->string2);
+					if (0 == strcmp(suffix, filter->string2)) {
+						return 1;
+					}
 				}
+				return 0;
+			});
+			
+			if (rc) {
+				break;
 			}
 			return 0;
 		case FILTER_REGEX:
@@ -1007,17 +1065,21 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, binding_
 				return 0;
 			}
 			term	= t->graph[ current_match[-node1] ]._term;
-			// fprintf(stderr, "matching (?%s) %s =~ %s (%p)\n", query->variable_names[-(filter->node1)], term->value, filter->string2, filter->re);
-			rc		= pcre_exec(
-				filter->re,					/* the compiled pattern */
-				NULL,						/* no extra data - we didn't study the pattern */
-				term->value,				/* the subject string */
-				(int) strlen(term->value),	/* the length of the subject */
-				0,							/* start at offset 0 in the subject */
-				0,							/* default options */
-				ovector,					/* output vector for substring information */
-				OVECCOUNT					/* number of elements in the output vector */
-			);
+			rc = triplestore_term_get_value(term, ^(size_t len, const char* value){
+				int OVECCOUNT	= 30;
+				int ovector[OVECCOUNT];
+				// fprintf(stderr, "matching (?%s) %s =~ %s (%p)\n", query->variable_names[-(filter->node1)], term->value, filter->string2, filter->re);
+				return pcre_exec(
+					filter->re,					/* the compiled pattern */
+					NULL,						/* no extra data - we didn't study the pattern */
+					value,						/* the subject string */
+					(int) len,					/* the length of the subject */
+					0,							/* start at offset 0 in the subject */
+					0,							/* default options */
+					ovector,					/* output vector for substring information */
+					OVECCOUNT					/* number of elements in the output vector */
+				);
+			});
 			if (rc <= 0) {
 				return 0;
 			}
