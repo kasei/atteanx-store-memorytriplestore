@@ -15,6 +15,21 @@
 #include <sys/stat.h>
 #include "triplestore.h"
 
+#ifdef DEBUG
+static intmax_t TRIPLESTORE_ALLOCATED	= 0;
+static void * my_calloc(size_t count, size_t size) {
+	TRIPLESTORE_ALLOCATED	+= (size * count);
+	return calloc(count, size);
+}
+
+static void my_free(void *ptr) {
+	free(ptr);
+}
+#else
+#define my_calloc calloc
+#define my_free free
+#endif
+
 struct parser_ctx_s {
 	int verbose;
 	int bnode_prefix;
@@ -93,13 +108,14 @@ rdf_term_t *triplestore_get_term(triplestore_t *t, nodeid_t id) {
 
 rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const char* _value, size_t value_len, const char* _vtype, size_t vtype_len, nodeid_t vid) {
 	// the rdf_term_t struct and main string payload are placed into the same memory block
-	char *v				= calloc(1, sizeof(rdf_term_t) + value_len + 1);
+	char *v				= my_calloc(1, sizeof(rdf_term_t) + value_len + 1);
 	rdf_term_t *term	= (rdf_term_t*) v;
-	term->value			= v + sizeof(rdf_term_t);
 	term->type			= type;
 	term->vtype.value_type.is_numeric	= 0;
+
+	term->value			= v + sizeof(rdf_term_t);
 	strncpy(term->value, _value, value_len);
-	
+
 	if (_vtype) {
 		if (vtype_len >= 8) {
 			fprintf(stderr, "*** Language tag is too long: %s\n", _vtype);
@@ -121,7 +137,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 		
 		if (rc <= 0) {
 			fprintf(stderr, "*** Language tag is not a valid lexical form: '%s'\n", _vtype);
-			free(v);
+			my_free(v);
 			return NULL;
 		}
 		
@@ -168,7 +184,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->integer_re)) {
 								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
-								free(v);
+								my_free(v);
 								return NULL;
 							}
 						}
@@ -178,7 +194,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->decimal_re)) {
 								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
-								free(v);
+								my_free(v);
 								return NULL;
 							}
 						}
@@ -188,7 +204,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->float_re)) {
 								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
-								free(v);
+								my_free(v);
 								return NULL;
 							}
 						}
@@ -203,7 +219,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->datetime_re)) {
 								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
-								free(v);
+								my_free(v);
 								return NULL;
 							}
 						}
@@ -211,7 +227,7 @@ rdf_term_t* triplestore_new_term_n(triplestore_t* t, rdf_term_type_t type, const
 						if (t->verify_datatypes) {
 							if (!_value_matches_regex(term->value, t->date_re)) {
 								fprintf(stderr, "*** Value is not a valid lexical form for type %s: '%s'\n", type, term->value);
-								free(v);
+								my_free(v);
 								return NULL;
 							}
 						}
@@ -245,12 +261,12 @@ rdf_term_t* triplestore_new_term(triplestore_t* t, rdf_term_type_t type, char* v
 
 void free_rdf_term(rdf_term_t* t) {
 //	if (t->type == TERM_LANG_LITERAL) {
-//		free(t->vtype.value_lang);
+//		my_free(t->vtype.value_lang);
 //	}
 
 	// t is the head of the single memory block for both the term struct and the string payload
-//	free(t->value);
-	free(t);
+//	my_free(t->value);
+	my_free(t);
 }
 
 int triplestore_size(triplestore_t* t) {
@@ -391,7 +407,7 @@ static void _hx_free_node_item (void *avl_item, void *avl_param) {
 			free_rdf_term(i->_term);
 		}
 	}
-	free( i );
+	my_free( i );
 }
 #pragma clang diagnostic pop
 
@@ -417,7 +433,7 @@ static pcre* _new_regex(const char* name, const char* pattern) {
 
 
 triplestore_t* new_triplestore(int max_nodes, int max_edges) {
-	triplestore_t* t	= (triplestore_t*) calloc(sizeof(triplestore_t), 1);
+	triplestore_t* t	= (triplestore_t*) my_calloc(sizeof(triplestore_t), 1);
 	t->read_only		= 0;
 	t->edges_alloc		= max_edges;
 	t->nodes_alloc		= max_nodes;
@@ -426,18 +442,18 @@ triplestore_t* new_triplestore(int max_nodes, int max_edges) {
 	t->verify_datatypes = 0;
 	t->bnode_prefix		= 0;
 //	fprintf(stderr, "allocating %d bytes for %"PRIu32" edges\n", max_edges * sizeof(index_list_element_t), max_edges);
-	t->edges		= calloc(sizeof(index_list_element_t), max_edges);
+	t->edges		= my_calloc(sizeof(index_list_element_t), max_edges);
 	if (t->edges == NULL) {
 		fprintf(stderr, "*** Failed to allocate memory for triplestore edges\n");
-		free(t);
+		my_free(t);
 		return NULL;
 	}
 //	fprintf(stderr, "allocating %d bytes for graph for %"PRIu32" nodes\n", max_nodes * sizeof(graph_node_t), max_nodes);
-	t->graph		= calloc(sizeof(graph_node_t), max_nodes);
+	t->graph		= my_calloc(sizeof(graph_node_t), max_nodes);
 	if (t->graph == NULL) {
 		fprintf(stderr, "*** Failed to allocate memory for triplestore graph\n");
-		free(t->edges);
-		free(t);
+		my_free(t->edges);
+		my_free(t);
 		return NULL;
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
@@ -459,9 +475,12 @@ int free_triplestore(triplestore_t* t) {
 	pcre_free(t->datetime_re);
 	pcre_free(t->lang_re);
 	avl_destroy(t->dictionary, _hx_free_node_item);
-	free(t->edges);
-	free(t->graph);
-	free(t);
+	my_free(t->edges);
+	my_free(t->graph);
+	my_free(t);
+#ifdef DEBUG
+	fprintf(stderr, "Allocated %"PRIuMAX" bytes total\n", TRIPLESTORE_ALLOCATED);
+#endif
 	return 0;
 }
 
@@ -637,8 +656,8 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	}
 	t->dictionary	= avl_create( _hx_node_cmp_str, NULL, &avl_allocator_default );
 	
-	free(t->edges);
-	free(t->graph);
+	my_free(t->edges);
+	my_free(t->graph);
 
 	struct stat fs;
 	fstat(fd, &fs);
@@ -671,9 +690,9 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 	t->edges_used	= edges;
 //	fprintf(stderr, "loading triplestore with %"PRIu32" edges and %"PRIu32" nodes\n", t->edges_used, t->nodes_used);
 	
-	t->graph				= calloc(sizeof(graph_node_t), 1+nalloc);
+	t->graph				= my_calloc(sizeof(graph_node_t), 1+nalloc);
 	for (uint32_t i = 1; i <= nodes; i++) {
-		hx_nodemap_item* item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
+		hx_nodemap_item* item	= (hx_nodemap_item*) my_calloc( 1, sizeof( hx_nodemap_item ) );
 		int length	= _triplestore_load_node(t, mp, &(t->graph[i]));
 		item->_term = t->graph[i]._term;
 		item->id	= i;
@@ -685,7 +704,7 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 //		free(string);
 	}
 
-	t->edges		= calloc(sizeof(index_list_element_t), 1+ealloc);
+	t->edges		= my_calloc(sizeof(index_list_element_t), 1+ealloc);
 	memcpy(&(t->edges[1]), mp, 20*edges);
 	for (uint32_t i = 1; i <= edges; i++) {
 		t->edges[i].s			= ntohl(t->edges[i].s);
@@ -722,17 +741,17 @@ int triplestore_load(triplestore_t* t, const char* filename, int verbose) {
 #pragma mark Result Tables
 
 table_t* triplestore_new_table(int width) {
-	table_t* table	= calloc(1, sizeof(table_t));
+	table_t* table	= my_calloc(1, sizeof(table_t));
 	table->width	= width;
 	table->alloc	= 128;
 	table->used		= 0;
-	table->ptr		= calloc(table->alloc, (1+width) * sizeof(binding_t));
+	table->ptr		= my_calloc(table->alloc, (1+width) * sizeof(binding_t));
 	return table;
 }
 
 int triplestore_free_table(table_t* table) {
-	free(table->ptr);
-	free(table);
+	my_free(table->ptr);
+	my_free(table);
 	return 0;
 }
 
@@ -858,7 +877,7 @@ int triplestore_table_sort(triplestore_t* t, table_t* table, sort_t* sort) {
 query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 	va_list ap;
 	va_start(ap, type);
-	query_filter_t* filter	= calloc(1, sizeof(query_filter_t));
+	query_filter_t* filter	= my_calloc(1, sizeof(query_filter_t));
 	filter->type	= type;
 	if (type == FILTER_ISIRI || type == FILTER_ISLITERAL || type == FILTER_ISBLANK || type == FILTER_ISNUMERIC) {
 		int64_t id		= va_arg(ap, int64_t);
@@ -873,8 +892,8 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		const char* fl	= va_arg(ap, char*);
 		size_t fl_len	= va_arg(ap, size_t);
 		filter->node1	= id;
-		filter->string2 = calloc(1, 1+pat_len);
-		filter->string3 = calloc(1, 1+fl_len);
+		filter->string2 = my_calloc(1, 1+pat_len);
+		filter->string3 = my_calloc(1, 1+fl_len);
 		strncpy(filter->string2, pat, pat_len);
 		strncpy(filter->string3, fl, fl_len);
 
@@ -896,9 +915,9 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		);
 		if (filter->re == NULL) {
 			printf("PCRE compilation failed at offset %d: %s\n", erroffset, error);
-			free(filter->string2);
-			free(filter->string3);
-			free(filter);
+			my_free(filter->string2);
+			my_free(filter->string3);
+			my_free(filter);
 			return NULL;
 		}
 		
@@ -909,13 +928,13 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 		const char* pat			= va_arg(ap, char*);
 		size_t pat_len			= va_arg(ap, size_t);
 		rdf_term_type_t type	= va_arg(ap, rdf_term_type_t);
-		filter->string2			= calloc(1, 1+pat_len);
+		filter->string2			= my_calloc(1, 1+pat_len);
 		strncpy(filter->string2, pat, pat_len);
 		filter->string2_type	= type;
 		if (type == TERM_LANG_LITERAL) {
 			const char* lang		= va_arg(ap, char*);
 			size_t lang_len			= va_arg(ap, size_t);
-			filter->string2_lang	= calloc(1, 1+lang_len);
+			filter->string2_lang	= my_calloc(1, 1+lang_len);
 			strncpy(filter->string2_lang, lang, lang_len);
 		} else {
 			filter->string2_lang	= NULL;
@@ -928,18 +947,18 @@ query_filter_t* triplestore_new_filter(filter_type_t type, ...) {
 
 int triplestore_free_filter(query_filter_t* filter) {
 	if (filter->string2_lang) {
-		free(filter->string2_lang);
+		my_free(filter->string2_lang);
 	}
 	if (filter->string2) {
-		free(filter->string2);
+		my_free(filter->string2);
 	}
 	if (filter->string3) {
-		free(filter->string3);
+		my_free(filter->string3);
 	}
 	if (filter->re) {
 		pcre_free(filter->re);
 	}
-	free(filter);
+	my_free(filter);
 	return 0;
 }
 
@@ -1098,16 +1117,16 @@ int _triplestore_filter_match(triplestore_t* t, query_filter_t* filter, binding_
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples) {
-	bgp_t* bgp		= calloc(sizeof(bgp_t), 1);
+	bgp_t* bgp		= my_calloc(sizeof(bgp_t), 1);
 	bgp->triples	= triples;
-	bgp->nodes		= calloc(sizeof(int64_t), 3 * triples);
+	bgp->nodes		= my_calloc(sizeof(int64_t), 3 * triples);
 	return bgp;
 }
 #pragma clang diagnostic pop
 
 int triplestore_free_bgp(bgp_t* bgp) {
-	free(bgp->nodes);
-	free(bgp);
+	my_free(bgp->nodes);
+	my_free(bgp);
 	return 0;
 }
 
@@ -1195,10 +1214,10 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, bin
 
 // final_match is a node ID array with final_match[0] representing the number of following node IDs
 int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^block)(binding_t* final_match)) {
-	binding_t* current_match = calloc(sizeof(binding_t), 1+variables);
+	binding_t* current_match = my_calloc(sizeof(binding_t), 1+variables);
 	current_match[0]	= variables;
 	int r	= _triplestore_bgp_match(t, bgp, 0, current_match, block);
-	free(current_match);
+	my_free(current_match);
 	return r;
 }
 
@@ -1208,16 +1227,16 @@ int triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int variables, int(^bloc
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 project_t* triplestore_new_project(triplestore_t* t, int variables) {
-	project_t* project	= calloc(sizeof(project_t), 1);
+	project_t* project	= my_calloc(sizeof(project_t), 1);
 	project->size	= variables;
-	project->keep	= calloc(1, 1+variables);
+	project->keep	= my_calloc(1, 1+variables);
 	return project;
 }
 #pragma clang diagnostic pop
 
 int triplestore_free_project(project_t* project) {
-	free(project->keep);
-	free(project);
+	my_free(project->keep);
+	my_free(project);
 	return 0;
 }
 
@@ -1249,10 +1268,10 @@ static int _triplestore_project(query_t* query, project_t* project, binding_t* c
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, int unique) {
-	sort_t* sort	= calloc(sizeof(sort_t), 1);
+	sort_t* sort	= my_calloc(sizeof(sort_t), 1);
 	sort->size		= variables;
 	sort->unique	= unique;
-	sort->vars		= calloc(sizeof(int64_t), variables);
+	sort->vars		= my_calloc(sizeof(int64_t), variables);
 	sort->table		= triplestore_new_table(result_width);
 	return sort;
 }
@@ -1260,8 +1279,8 @@ sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, 
 
 int triplestore_free_sort(sort_t* sort) {
 	triplestore_free_table(sort->table);
-	free(sort->vars);
-	free(sort);
+	my_free(sort->vars);
+	my_free(sort);
 	return 0;
 }
 
@@ -1281,7 +1300,7 @@ static int _triplestore_sort_fill(sort_t* sort, binding_t* current_match) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, nodeid_t pred, int64_t end) {
-	path_t* path	= calloc(sizeof(path_t), 1);
+	path_t* path	= my_calloc(sizeof(path_t), 1);
 	path->type	= type;
 	path->start = start;
 	path->end	= end;
@@ -1291,7 +1310,7 @@ path_t* triplestore_new_path(triplestore_t* t, path_type_t type, int64_t start, 
 #pragma clang diagnostic pop
 
 int triplestore_free_path(path_t* path) {
-	free(path);
+	my_free(path);
 	return 0;
 }
 
@@ -1333,7 +1352,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 	
 	int r	= 0;
 	if (path->type == PATH_STAR || path->type == PATH_PLUS) {
-		char* seen	= calloc(1, t->nodes_used);
+		char* seen	= my_calloc(1, t->nodes_used);
 		
 		int64_t start	= path->start;
 //		fprintf(stderr, "matching path with start %"PRId64"\n", start);
@@ -1347,7 +1366,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 		
 		if (start <= 0) {
 //			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
-			char* starts	= calloc(1, t->nodes_used);
+			char* starts	= my_calloc(1, t->nodes_used);
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 			r	= triplestore_match_triple(t, start, path->pred, 0, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
@@ -1369,7 +1388,7 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 				});
 			});
 #pragma clang diagnostic pop
-			free(starts);
+			my_free(starts);
 		} else {
 			r	= _triplestore_path_step(t, (nodeid_t)start, path->pred, seen, 0, ^(nodeid_t reached) {
 				if (path->end < 0) {
@@ -1378,16 +1397,16 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 				return block(current_match);
 			});
 		}
-		free(seen);
+		my_free(seen);
 	}
 	return r;
 }
 
 int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^block)(binding_t* final_match)) {
-	binding_t* current_match = calloc(sizeof(binding_t), 1+variables);
+	binding_t* current_match = my_calloc(sizeof(binding_t), 1+variables);
 	current_match[0]	= variables;
 	int r				= _triplestore_path_match(t, path, current_match, block);
-	free(current_match);
+	my_free(current_match);
 	return r;
 }
 
@@ -1406,10 +1425,10 @@ int triplestore_query_set_max_variables(query_t* query, int max) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 query_t* triplestore_new_query(triplestore_t* t, int variables) {
-	query_t* query			= calloc(sizeof(query_t), 1);
+	query_t* query			= my_calloc(sizeof(query_t), 1);
 // 	fprintf(stderr, "new query %p\n", query);
 	triplestore_query_set_max_variables(query, variables);
-	query->variable_names	= calloc(sizeof(char*), variables+1);
+	query->variable_names	= my_calloc(sizeof(char*), variables+1);
 	return query;
 }
 #pragma clang diagnostic pop
@@ -1439,23 +1458,23 @@ int triplestore_free_query_op(query_op_t* op) {
 			fprintf(stderr, "Unrecognized query operation %d\n", op->type);
 			return 1;
 	};
-	free(op);
+	my_free(op);
 	return 0;
 }
 
 int triplestore_free_query(query_t* query) {
 	for (int i = 0; i <= triplestore_query_get_max_variables(query); i++) {
-		free(query->variable_names[i]);
+		my_free(query->variable_names[i]);
 		query->variable_names[i]	= NULL;
 	}
-	free(query->variable_names);
+	my_free(query->variable_names);
 	query->variable_names	= NULL;
 	
 	if (query->head) {
 		triplestore_free_query_op(query->head);
 	}
 	
-	free(query);
+	my_free(query);
 	return 0;
 }
 
@@ -1466,10 +1485,10 @@ int triplestore_query_set_variable_name_n(query_t* query, int variable, const ch
 	
 	if (query->variable_names[variable]) {
 		fprintf(stderr, "freeing %d: %p\n", variable, query->variable_names[variable]);
-		free(query->variable_names[variable]);
+		my_free(query->variable_names[variable]);
 		query->variable_names[variable] = NULL;
 	}
-	query->variable_names[variable] = calloc(1, 1+name_len);
+	query->variable_names[variable] = my_calloc(1, 1+name_len);
 	if (!query->variable_names[variable]) {
 		return 1;
 	}
@@ -1487,14 +1506,14 @@ int triplestore_ensure_variable_capacity(query_t* query, int var) {
 	if (var > triplestore_query_get_max_variables(query)) {
 		int previous_count	= triplestore_query_get_max_variables(query);
 		triplestore_query_set_max_variables(query, var);
-		char** new_names	= calloc(sizeof(char*), 1+var);
+		char** new_names	= my_calloc(sizeof(char*), 1+var);
 		if (!new_names) {
 			return -1;
 		}
 		for (int i = 0; i <= previous_count; i++) {
 			new_names[i]	= query->variable_names[i];
 		}
-		free(query->variable_names);
+		my_free(query->variable_names);
 		query->variable_names	= new_names;
 		return 1;
 	}
@@ -1517,7 +1536,7 @@ int64_t triplestore_query_add_variable(query_t* query, const char* name) {
 }
 
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr) {
-	query_op_t* op	= calloc(1, sizeof(query_op_t));
+	query_op_t* op	= my_calloc(1, sizeof(query_op_t));
 	op->next	= NULL;
 	op->type	= type;
 	op->ptr		= ptr;
@@ -1565,11 +1584,11 @@ static int _triplestore_query_op_match(triplestore_t* t, query_t* query, query_o
 #pragma clang diagnostic ignored "-Wunused-parameter"
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(binding_t* final_match)) {
 // 	triplestore_print_query(t, query, stderr);
-	binding_t* current_match = calloc(sizeof(binding_t), 1+triplestore_query_get_max_variables(query));
+	binding_t* current_match = my_calloc(sizeof(binding_t), 1+triplestore_query_get_max_variables(query));
 	current_match[0]	= triplestore_query_get_max_variables(query);
 	query_op_t* op		= query->head;
 	int r				= _triplestore_query_op_match(t, query, op, current_match, block);
-	free(current_match);
+	my_free(current_match);
 	if (r) {
 		return r;
 	}
@@ -1582,7 +1601,7 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 			table_t* table	= sort->table;
 			triplestore_table_sort(t, table, sort);
 			int size			= sizeof(binding_t) * (1+triplestore_query_get_max_variables(query));
-			binding_t* last		= calloc(1, size);
+			binding_t* last		= my_calloc(1, size);
 			if (!last) {
 				return 1;
 			}
@@ -1597,7 +1616,7 @@ int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int
 					_triplestore_query_op_match(t, query, op->next, result, block);
 				}
 			}
-			free(last);
+			my_free(last);
 		}
 		op	= op->next;
 	}
@@ -1700,7 +1719,7 @@ nodeid_t triplestore_add_term(triplestore_t* t, rdf_term_t* myterm) {
 			}
 		}
 
-		item	= (hx_nodemap_item*) calloc( 1, sizeof( hx_nodemap_item ) );
+		item	= (hx_nodemap_item*) my_calloc( 1, sizeof( hx_nodemap_item ) );
 		item->_term = myterm;
 		item->id	= ++t->nodes_used;
 		avl_insert( t->dictionary, item );
