@@ -11,7 +11,7 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 	use Types::Standard qw(Str);
 # 	use namespace::clean;
 	has store => (is => 'ro');
-	with 'Attean::API::Plan', 'Attean::API::NullaryQueryTree';
+	with 'Attean::API::BindingSubstitutionPlan', 'Attean::API::NullaryQueryTree';
 	
 	# NOTE: Objects of this class are not meant to be constructed from perl.
 	#       They should only be constructed from within the XS code that is a
@@ -200,9 +200,15 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 		return 1;
 	}
 	
-	sub impl {
+	sub substitute_impl {
 		my $self	= shift;
 		my $model	= shift;
+		my $b		= shift;
+		my @vars	= $b->variables;
+		if (scalar(@vars)) {
+			die "Unimplemented: Cannot substitute variables in MemoryTripleStore query plan at execution time yet";
+		}
+		
 		my $store	= $self->store;
 		return sub {
 			my @results;
