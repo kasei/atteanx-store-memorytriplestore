@@ -79,10 +79,17 @@ package AtteanX::Store::MemoryTripleStore {
 		}
 	}
 	
+=item C<< load_file ( $filename ) >>
+
+Parse the RDF in C<< $filename >> and add the resulting triples to this store.
+
+=cut
+
 	sub load_file {
 		my $self	= shift;
 		my $filename	= shift;
 		$self->_load_file($filename, 0);
+		return $self->size;
 	}
 	
 =item C<< get_triples ( $subject, $predicate, $object ) >>
