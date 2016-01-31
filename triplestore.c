@@ -69,6 +69,22 @@ double triplestore_elapsed_time(double start) {
 //	}
 // }
 
+static void _print_result(triplestore_t* t, binding_t* match, FILE* f) {
+	int count	= match[0];
+	fprintf(f, "{ ");
+	for (int i = 1; i <= count; i++) {
+		binding_t termid	= match[i];
+		if (termid > 0) {
+			if (i > 1) {
+				fprintf(f, ", ");
+			}
+			fprintf(f, "%d=", i);
+			triplestore_print_term(t, (nodeid_t)termid, f, 0);
+		}
+	}
+	fprintf(f, " }\n");
+}
+
 #pragma mark -
 #pragma mark RDF Terms
 
@@ -1190,9 +1206,9 @@ int _triplestore_bgp_match(triplestore_t* t, bgp_t* bgp, int current_triple, bin
 		}
 	}
 	
-//	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
+// 	fprintf(stderr, "BGP matching triple %d: %"PRId64" %"PRId64" %"PRId64"\n", current_triple, s, p, o);
 	int r	= triplestore_match_triple(t, s, p, o, ^(triplestore_t* t, nodeid_t _s, nodeid_t _p, nodeid_t _o) {
-//		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
+// 		fprintf(stderr, "-> BGP triple %d match: %"PRIu32" %"PRIu32" %"PRIu32"\n", current_triple, _s, _p, _o);
 		if (s < 0) {
 			current_match[-s]	= _s;
 		}
@@ -1355,17 +1371,27 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 		char* seen	= my_calloc(1, t->nodes_used);
 		
 		int64_t start	= path->start;
+		int64_t end		= path->end;
+		
+		int orig_end	= end;
+		if (end < 0) {
+			int64_t e	= current_match[-end];
+			if (e > 0) {
+				end	= e;
+			}
+		}
+		
 //		fprintf(stderr, "matching path with start %"PRId64"\n", start);
 		if (start < 0) {
 			int64_t s	= current_match[-start];
 			if (s > 0) {
 				start	= s;
-//				fprintf(stderr, "replacing path start with bound term %"PRId64"\n", start);
+// 				fprintf(stderr, "replacing path start with bound term %"PRId64"\n", start);
 			}
 		}
 		
 		if (start <= 0) {
-//			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
+// 			fprintf(stderr, "pre-binding path starting nodes (%"PRId64")...\n", start);
 			char* starts	= my_calloc(1, t->nodes_used);
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -1376,20 +1402,29 @@ int _triplestore_path_match(triplestore_t* t, path_t* path, binding_t* current_m
 				memset(seen, 0, t->nodes_used);
 //				fprintf(stderr, "path match setting match[%"PRId64"]\n", -start);
 				current_match[-start]	= _s;
-				return _triplestore_path_step(t, _s, path->pred, seen, 0, ^(nodeid_t reached) {
-					if (path->end < 0) {
-						current_match[-(path->end)] = reached;
-					} else if (path->end > 0) {
-						if (reached != path->end) {
+				int rc	= _triplestore_path_step(t, _s, path->pred, seen, 0, ^(nodeid_t reached) {
+// 					fprintf(stderr, "Path end: %"PRId64": %"PRIu32"\n", end, reached);
+					if (end < 0) {
+						current_match[-end] = reached;
+					} else if (end > 0) {
+						if (reached != end) {
+// 							fprintf(stderr, "- reached node does not match the path end\n");
 							return 0;
 						}
 					}
-					return block(current_match);
+					int rc	= block(current_match);
+					if (orig_end < 0) {
+						current_match[-orig_end] = 0;
+					}
+					return rc;
 				});
+				current_match[-start]	= 0;
+				return rc;
 			});
 #pragma clang diagnostic pop
 			my_free(starts);
 		} else {
+// 			fprintf(stderr, "path starting node is bound\n");
 			r	= _triplestore_path_step(t, (nodeid_t)start, path->pred, seen, 0, ^(nodeid_t reached) {
 				if (path->end < 0) {
 					current_match[-(path->end)] = reached;
@@ -2010,7 +2045,7 @@ static void _print_term_or_variable(triplestore_t* t, int variables, char** vari
 	if (s == 0) {
 		fprintf(f, "[]");
 	} else if (s < 0) {
-		assert(-s < variables);
+		assert(-s <= variables);
 		fprintf(f, "?%s", variable_names[-s]);
 	} else {
 		triplestore_print_term(t, (nodeid_t)s, f, 0);
@@ -2174,7 +2209,6 @@ void triplestore_query_op_as_string_chunks(triplestore_t* t, query_t* query, que
 }
 
 void triplestore_query_as_string_chunks(triplestore_t* t, query_t* query, void(^append)(const char* line, size_t len)) {
-	fprintf(stderr, "serializing query %p\n", query);
 	const char* NAME	= "MemoryTripleStoreQuery";
 	append(NAME, strlen(NAME));
 // 	append(" {", 2);
