@@ -2138,4 +2138,49 @@ void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f) {
 	fprintf(f, "----------\n");
 }
 
+void triplestore_query_op_as_string_chunks(triplestore_t* t, query_t* query, query_op_t* op, void(^append)(const char* line, size_t len)) {
+	if (op->type == QUERY_BGP) {
+		append("BGP", 3);
+	} else if (op->type == QUERY_PROJECT) {
+		append("Project", 7);
+	} else if (op->type == QUERY_SORT) {
+		append("Sort", 4);
+	} else if (op->type == QUERY_FILTER) {
+		append("Filter", 6);
+	} else if (op->type == QUERY_PATH) {
+		append("Path", 4);
+	} else {
+		fprintf(stderr, "*** Unrecognized query op %d\n", op->type);
+	}
+}
 
+void triplestore_query_as_string_chunks(triplestore_t* t, query_t* query, void(^append)(const char* line, size_t len)) {
+	fprintf(stderr, "serializing query %p\n", query);
+	const char* NAME	= "MemoryTripleStoreQuery";
+	append(NAME, strlen(NAME));
+// 	append(" {", 2);
+// 	int vars	= triplestore_query_get_max_variables(query);
+// 	for (int v = 1; v <= vars; v++) {
+// 		const char* name	= query->variable_names[v];
+// 		if (v > 1) {
+// 			append(", ", 2);
+// 		}
+// 		append("?", 1);
+// 		append(name, strlen(name));
+// 	}
+// 	append("} ", 2);
+
+	append(" { ", 3);
+	
+	query_op_t* op	= query->head;
+	while (op != NULL) {
+		triplestore_query_op_as_string_chunks(t, query, op, append);
+		op	= op->next;
+		if (op) {
+			append(" \xE2\x86\x92 ", 5); // RIGHTWARDS ARROW (U+2192)
+		}
+	}
+
+	append(" }", 2);
+	return;
+}

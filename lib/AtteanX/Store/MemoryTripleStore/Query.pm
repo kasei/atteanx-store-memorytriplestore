@@ -39,6 +39,11 @@ package AtteanX::Store::MemoryTripleStore::Query 0.001 {
 		return $args;
 	};
 	
+	sub plan_as_string {
+		my $self	= shift;
+		return $self->_as_string($self->store);
+	}
+	
 	sub _bgp_ids {
 		my $self	= shift;
 		my @ids;

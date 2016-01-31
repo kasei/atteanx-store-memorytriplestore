@@ -203,6 +203,8 @@ int64_t triplestore_query_add_variable_n(query_t* query, const char* name, size_
 int triplestore_query_add_op(query_t* query, query_type_t type, void* ptr);
 int triplestore_query_match(triplestore_t* t, query_t* query, int64_t limit, int(^block)(binding_t* final_match));
 int triplestore_query_get_max_variables(query_t* query);
+void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
+void triplestore_query_as_string_chunks(triplestore_t* t, query_t* query, void(^cb)(const char* line, size_t len));
 
 // BGPs
 bgp_t* triplestore_new_bgp(triplestore_t* t, int variables, int triples);
@@ -217,7 +219,6 @@ int triplestore_path_match(triplestore_t* t, path_t* path, int variables, int(^b
 // Filters
 query_filter_t* triplestore_new_filter(filter_type_t type, ...);
 int triplestore_free_filter(query_filter_t* filter);
-void triplestore_print_query(triplestore_t* t, query_t* query, FILE* f);
 
 // Sorting
 sort_t* triplestore_new_sort(triplestore_t* t, int result_width, int variables, int unique);

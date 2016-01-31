@@ -393,6 +393,22 @@ query_get_variable_id(query_t* query, char* var)
 	OUTPUT:
 		RETVAL
 
+SV*
+query__as_string (query_t* query, triplestore_t* t)
+	INIT:
+		__block SV* r;
+	CODE:
+		r	= newSVpv("", 0);
+		triplestore_query_as_string_chunks(t, query, ^(const char* line, size_t len) {
+// 			fprintf(stderr, "appending %zu bytes: ", len);
+// 			fwrite(line, len, 1, stderr);
+// 			fprintf(stderr, "\n");
+			sv_catpvn(r, line, len);
+		});
+		RETVAL = r;
+	OUTPUT:
+		RETVAL
+
 IV
 query_get_or_assign_variable_id(query_t* query, char* var)
 	INIT:
