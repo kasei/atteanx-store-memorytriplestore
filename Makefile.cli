@@ -1,4 +1,4 @@
-LDLIBS	= -lraptor2 -lpcre -L/usr/local/lib -lcompression
+LDLIBS	= -lraptor2 -lpcre -L/usr/local/lib
 CFLAGS	= -march=native -fblocks -g -Werror -Wextra -Wpedantic -Wall -I../src -I/usr/local/include/raptor2 -I/usr/include/raptor2 -I/usr/local/include -flto
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
