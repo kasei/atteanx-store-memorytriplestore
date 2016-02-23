@@ -535,7 +535,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			return 1;
 		}
 		if (argc < (i + 1 + 1)) {
-			ctx->set_error(-1, "Insufficient arguments passed to BGP");
+			ctx->set_error(-1, "Insufficient arguments passed to SET");
 			return 1;
 		}
 
@@ -546,14 +546,14 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			ctx->verbose	= 1;
 		} else if (!strcmp(field, "limit")) {
 			if (argc < (i + 1 + 1)) {
-				ctx->set_error(-1, "Insufficient arguments passed to BGP");
+				ctx->set_error(-1, "Insufficient arguments passed to LIMIT");
 				return 1;
 			}
 
 			ctx->limit	= atoll(argv[++i]);
 		} else if (!strcmp(field, "language")) {
 			if (argc < (i + 1 + 1)) {
-				ctx->set_error(-1, "Insufficient arguments passed to BGP");
+				ctx->set_error(-1, "Insufficient arguments passed to LANGUAGE");
 				return 1;
 			}
 
@@ -566,7 +566,7 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 			return 1;
 		}
 		if (argc < (i + 1 + 1)) {
-			ctx->set_error(-1, "Insufficient arguments passed to BGP");
+			ctx->set_error(-1, "Insufficient arguments passed to UNSET");
 			return 1;
 		}
 
