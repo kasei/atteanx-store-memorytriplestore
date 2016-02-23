@@ -419,6 +419,10 @@ int triplestore_run_query(triplestore_server_t* s, triplestore_t* t, char* query
 		write_tsv_results_header(out, query);
 	};
 	
+	ctx.custom_output		= ^(const char* message){
+		fprintf(out, "%s", message);
+	};
+	
 	ctx.result_block		= ^(query_t* query, binding_t* final_match){
 		serialize_result(&ctx, out, t, query, final_match);
 	};

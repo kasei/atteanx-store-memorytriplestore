@@ -580,7 +580,10 @@ int triplestore_op(triplestore_t* t, struct command_ctx_s* ctx, int argc, char**
 		}
 	} else if (!strcmp(op, "size")) {
 		uint32_t count	= triplestore_size(t);
-		fprintf(stderr, "SIZE: %"PRIu32" triples\n", count);
+// 		fprintf(stderr, "SIZE: %"PRIu32" triples\n", count);
+		char buffer[32];
+		sprintf(buffer, "%"PRIu32"", count);
+		ctx->custom_output(buffer);
 	} else if (!strcmp(op, "begin")) {
 		ctx->constructing	= 1;
 		ctx->query			= NULL;
